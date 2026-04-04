@@ -1,0 +1,13 @@
+# Test data (users should create their own)
+raw/
+wiki/
+output/
+.kf.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
