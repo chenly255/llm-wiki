@@ -80,12 +80,12 @@ In Claude Code:
 
 ```
 /llm-wiki init my-research   # Initialize a project
-/llm-wiki ingest             # Process new docs from inbox
+/llm-wiki digest             # Digest new docs from inbox
 /llm-wiki compile            # Build wiki (extract concepts + entities + links)
-/llm-wiki ask "question"     # Ask the knowledge base
-/llm-wiki maintain           # Health check (find issues, fix links)
-/llm-wiki output "topic"     # Generate reports/slides
-/llm-wiki promote            # Export approved content
+/llm-wiki query "question"     # Query the knowledge base
+/llm-wiki check           # Health check
+/llm-wiki export "topic"     # Export reports/slides
+/llm-wiki trust            # Mark content as trusted
 ```
 
 Or use natural language:
@@ -96,7 +96,7 @@ Or use natural language:
 "What does the knowledge base say about attention mechanisms?"
 "Run a health check on the wiki"
 "Generate a report on transformers from the knowledge base"
-"Promote the knowledge-flywheel article"
+"Trust the knowledge-flywheel article"
 ```
 
 ## 📁 Project Structure
@@ -105,7 +105,7 @@ Or use natural language:
 your-project/
 ├── raw/
 │   ├── inbox/              # Drop new materials here
-│   └── sources/            # Processed originals (moved here after ingest)
+│   └── sources/            # Processed originals (moved here after digest)
 ├── wiki/                   # AI-compiled knowledge base (don't touch!)
 │   ├── _index.md           # Master index
 │   ├── _graph.md           # Link graph
@@ -113,7 +113,7 @@ your-project/
 │   ├── entities/           # Entity articles (people, tools, orgs)
 │   └── sources/            # Source summaries
 ├── output/                 # AI-generated deliverables
-├── promoted/               # Content you approved (your trusted knowledge)
+├── trusted/               # Content you trust (human-verified)
 └── .kf.md                  # Project config
 ```
 

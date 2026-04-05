@@ -80,12 +80,12 @@ cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 
 ```
 /llm-wiki init my-research   # 初始化知识库项目
-/llm-wiki ingest             # 消化 inbox 里的新资料
+/llm-wiki digest             # 消化 inbox 里的新资料
 /llm-wiki compile            # 编译 wiki（提取概念+实体+建关联）
-/llm-wiki ask "问题"          # 对知识库提问
-/llm-wiki maintain           # 健康检查（找矛盾·补缺·修链接）
-/llm-wiki output "主题"      # 生成报告/幻灯片
-/llm-wiki promote            # 导出你确认过的内容
+/llm-wiki query "问题"          # 对知识库提问
+/llm-wiki check           # 健康检查（找矛盾·补缺·修链接）
+/llm-wiki export "主题"      # 生成报告/幻灯片
+/llm-wiki trust            # 标记你信任的内容
 ```
 
 或者直接用自然语言：
@@ -113,7 +113,7 @@ your-project/
 │   ├── entities/           # 实体文章（人物、工具、组织）
 │   └── sources/            # 原文摘要
 ├── output/                 # AI 生成的交付物
-├── promoted/               # 你审核通过的内容（你的可信知识）
+├── trusted/               # 你审核通过的内容（你信任的知识）
 └── .kf.md                  # 项目配置
 ```
 

@@ -5,7 +5,7 @@ description: >
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, ingest, compile, ask, maintain, output, promote.
+  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
@@ -15,7 +15,7 @@ Build and maintain LLM-powered personal knowledge bases.
 
 Two core principles:
 1. **Karpathy**: Raw docs → LLM "compiles" a structured wiki → Q&A → outputs loop back in.
-2. **kepano (Obsidian CEO)**: AI-generated content must be **isolated** from your trusted knowledge. Only `promote` moves content to your main vault after your explicit approval.
+2. **kepano (Obsidian CEO)**: AI-generated content must be **isolated** from your trusted knowledge. Only `trust` moves content to your main vault after your explicit approval.
 
 ## Project Structure
 
@@ -29,19 +29,19 @@ Two core principles:
 │   ├── _graph.md           # Backlink graph
 │   ├── concepts/           # Concept articles (ideas, methods, patterns)
 │   ├── entities/           # Entity articles (people, tools, orgs, datasets)
-│   └── sources/            # Source summaries (1 per ingested document)
+│   └── sources/            # Source summaries (1 per digested document)
 ├── output/                 # Generated deliverables
 │   ├── reports/
 │   ├── slides/
 │   └── charts/
-├── promoted/               # Content you approved via `promote` (your trusted knowledge)
+├── trusted/               # Content you approved via `trust` (your trusted knowledge)
 └── .kf.md                  # Project config
 ```
 
 ## The Pipeline
 
 ```
-inbox/ ──ingest──→ sources/    (tag & move)
+inbox/ ──digest──→ sources/    (tag & move)
                       │
                    compile     (build wiki)
                       │
@@ -50,11 +50,11 @@ inbox/ ──ingest──→ sources/    (tag & move)
                       │
               ┌───────┼───────┐
               ▼       ▼       ▼
-            ask    maintain  output
+           query    check    export
               │       │       │
               └───────┼───────┘
                       ▼
-                   promote     (you approve → promoted/)
+                    trust     (you approve → trusted/)
 ```
 
 ---
@@ -81,7 +81,7 @@ inbox/ ──ingest──→ sources/    (tag & move)
 
 5. Create directory structure:
    ```
-   mkdir -p raw/inbox raw/sources wiki/concepts wiki/entities wiki/sources output/reports output/slides output/charts promoted
+   mkdir -p raw/inbox raw/sources wiki/concepts wiki/entities wiki/sources output/reports output/slides output/charts trusted
    ```
 
 6. Create `.kf.md`:
@@ -93,7 +93,7 @@ inbox/ ──ingest──→ sources/    (tag & move)
    - Inbox: raw/inbox/
    - Sources: raw/sources/
    - Wiki articles: 0
-   - Last ingested: never
+   - Last digested: never
    - Last compiled: never
    ```
 
@@ -103,11 +103,11 @@ inbox/ ──ingest──→ sources/    (tag & move)
 
 ---
 
-### 2. `ingest` — Process Inbox
+### 2. `digest` — Digest Inbox
 
-**Usage:** `llm-wiki ingest` or "帮我消化 inbox 里的新资料"
+**Usage:** `llm-wiki digest` or "帮我消化 inbox 里的新资料"
 
-Ingest only **processes and records** new documents. It does NOT rebuild the wiki — that's `compile`.
+Digest only **processes and records** new documents. It does NOT rebuild the wiki — that's `compile`.
 
 **Steps:**
 
@@ -122,9 +122,9 @@ Ingest only **processes and records** new documents. It does NOT rebuild the wik
    ```markdown
    # {Document Title}
    > Source: `raw/sources/{filename}`
-   > Ingested: {date}
+   > Digested: {date}
    > Type: {paper|article|code|dataset|other}
-   > Status: ingested (pending compile)
+   > Status: digested (pending compile)
 
    ## Summary
    {3-5 sentence summary}
@@ -150,11 +150,11 @@ Ingest only **processes and records** new documents. It does NOT rebuild the wik
    mv raw/inbox/{file} raw/sources/{file}
    ```
 
-5. Update `.kf.md` with new source count and last-ingested date.
-6. Report: "Ingested N documents. Run `compile` to rebuild the wiki."
+5. Update `.kf.md` with new source count and last-digested date.
+6. Report: "Digested N documents. Run `compile` to rebuild the wiki."
 
-**Key rule:** Ingest does NOT create or update concept/entity articles. It only creates source
-summaries and moves files out of inbox. This keeps ingest fast and separable from compile.
+**Key rule:** Digest does NOT create or update concept/entity articles. It only creates source
+summaries and moves files out of inbox. This keeps digest fast and separable from compile.
 
 ---
 
@@ -229,9 +229,9 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 ---
 
-### 4. `ask` — Ask the Knowledge Base
+### 4. `query` — Query the Knowledge Base
 
-**Usage:** `llm-wiki ask "your question"` or just ask a question naturally.
+**Usage:** `llm-wiki query "your question"` or just ask a question naturally.
 
 **Steps:**
 
@@ -253,9 +253,9 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 ---
 
-### 5. `maintain` — Health Check
+### 5. `check` — Health Check
 
-**Usage:** `llm-wiki maintain` or "检查一下知识库"
+**Usage:** `llm-wiki check` or "检查一下知识库"
 
 **Checks:**
 - **Broken links:** `[[...]]` pointing to non-existent articles.
@@ -270,9 +270,9 @@ Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 
 ---
 
-### 6. `output` — Generate Deliverables
+### 6. `export` — Export Deliverables
 
-**Usage:** `llm-wiki output "topic" [format]` or "生成一份报告"
+**Usage:** `llm-wiki export "topic" [format]` or "生成一份报告"
 
 **Formats:**
 - `report` (default): markdown report in `output/reports/`
@@ -287,29 +287,29 @@ Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 
 ---
 
-### 7. `promote` — Export Approved Content
+### 7. `trust` — Trust — Approve Content
 
-**Usage:** `llm-wiki promote` or "把确认过的内容导出来"
+**Usage:** `llm-wiki trust` or "把确认过的内容导出来"
 
-The wiki is AI-generated draft territory. `promote` lets you review and export
-specific articles to `promoted/` — your trusted, human-approved knowledge.
+The wiki is AI-generated draft territory. `trust` lets you review and export
+specific articles to `trusted/` — your trusted, human-approved knowledge.
 
 **Steps:**
 
 1. Show a list of wiki articles (from `wiki/_index.md`).
-2. Ask user to select which articles to promote (by number or name).
+2. Ask user to select which articles to trust (by number or name).
 3. For each selected article:
    a. Show the full content to the user.
    b. Ask: "确认导出这篇？(y/n/edit)"
-      - **y**: copy to `promoted/{path}.md` as-is.
+      - **y**: copy to `trusted/{path}.md` as-is.
       - **edit**: let user describe changes, apply them, then copy.
       - **n**: skip.
-4. Report: "Promoted N articles to promoted/."
+4. Report: "Trusted N articles to trusted/."
 
-**Why promote exists:**
+**Why trust exists:**
 - Wiki content is AI-generated, may contain errors or hallucinations.
-- `promoted/` is YOUR vetted knowledge — you've read and approved every article in it.
-- If you use Obsidian or another vault, you can point it at `promoted/` with confidence.
+- `trusted/` is YOUR vetted knowledge — you've read and approved every article in it.
+- If you use Obsidian or another vault, you can point it at `trusted/` with confidence.
 - This follows kepano's isolation principle: AI drafts and trusted knowledge stay separate.
 
 ---
@@ -341,8 +341,8 @@ Key rules:
 
 ## Tips
 
-1. **Drop → Ingest → Compile**: drop files into inbox, ingest to process, compile to build wiki.
-2. **Ask often**: every answer can feed back into the wiki.
-3. **Maintain regularly**: catch issues before they compound.
-4. **Promote carefully**: only export what you've actually reviewed.
+1. **Drop → Digest → Compile**: drop files into inbox, digest to process, compile to build wiki.
+2. **Query often**: every answer can feed back into the wiki.
+3. **Check regularly**: catch issues before they compound.
+4. **Trust carefully**: only export what you've actually reviewed.
 5. **Don't edit wiki/ manually**: that's the LLM's domain. Add info via raw/inbox/.
