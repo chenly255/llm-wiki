@@ -100,11 +100,14 @@ def build_backlink_graph(articles: dict) -> dict:
             if '/' in link:
                 target = link + '.md' if not link.endswith('.md') else link
             else:
-                # Try to find in concepts/ first, then sources/
+                # Try to find in concepts/ first, then entities/, then sources/
                 target_concept = f'concepts/{link}.md'
+                target_entity = f'entities/{link}.md'
                 target_source = f'sources/{link}.md'
                 if target_concept in articles:
                     target = target_concept
+                elif target_entity in articles:
+                    target = target_entity
                 elif target_source in articles:
                     target = target_source
                 else:
@@ -120,18 +123,20 @@ def generate_index(articles: dict, backlinks: dict) -> str:
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     concepts = {k: v for k, v in articles.items() if k.startswith('concepts/')}
+    entities = {k: v for k, v in articles.items() if k.startswith('entities/')}
     sources = {k: v for k, v in articles.items() if k.startswith('sources/')}
-    other = {k: v for k, v in articles.items() if not k.startswith(('concepts/', 'sources/'))}
+    other = {k: v for k, v in articles.items() if not k.startswith(('concepts/', 'entities/', 'sources/'))}
 
     total_words = sum(a['word_count'] for a in articles.values())
 
     lines = [
         '# Knowledge Index',
-        '> Auto-maintained by knowledge-factory. Do not edit manually.',
+        '> Auto-maintained by llm-wiki. Do not edit manually.',
         '',
         '## Statistics',
         f'- Total articles: {len(articles)}',
-        f'- Concept articles: {len(concepts)}',
+        f'- Concepts: {len(concepts)}',
+        f'- Entities: {len(entities)}',
         f'- Source summaries: {len(sources)}',
         f'- Total words: ~{total_words:,}',
         f'- Last updated: {now}',
@@ -144,6 +149,16 @@ def generate_index(articles: dict, backlinks: dict) -> str:
         for path in sorted(concepts.keys()):
             meta = concepts[path]
             name = path.replace('concepts/', '').replace('.md', '')
+            n_backlinks = len(backlinks.get(path, []))
+            lines.append(f'- [[{name}]] — {meta["summary"]} ({n_backlinks} refs)')
+        lines.append('')
+
+    if entities:
+        lines.append('## Entities')
+        lines.append('')
+        for path in sorted(entities.keys()):
+            meta = entities[path]
+            name = path.replace('entities/', '').replace('.md', '')
             n_backlinks = len(backlinks.get(path, []))
             lines.append(f'- [[{name}]] — {meta["summary"]} ({n_backlinks} refs)')
         lines.append('')
@@ -200,7 +215,7 @@ def generate_graph(articles: dict, backlinks: dict) -> str:
     for path, meta in articles.items():
         for link in meta['links']:
             resolved = False
-            for prefix in ['concepts/', 'sources/', '']:
+            for prefix in ['concepts/', 'entities/', 'sources/', '']:
                 candidate = f'{prefix}{link}.md' if not link.endswith('.md') else f'{prefix}{link}'
                 if candidate in all_paths:
                     resolved = True
@@ -246,11 +261,13 @@ def main():
 
     if args.stats_only:
         concepts = sum(1 for k in articles if k.startswith('concepts/'))
+        entities = sum(1 for k in articles if k.startswith('entities/'))
         sources = sum(1 for k in articles if k.startswith('sources/'))
         total_words = sum(a['word_count'] for a in articles.values())
         print(json.dumps({
             'total_articles': len(articles),
             'concepts': concepts,
+            'entities': entities,
             'sources': sources,
             'total_words': total_words,
         }, indent=2))
@@ -270,7 +287,7 @@ def main():
     broken_count = sum(
         1 for path, meta in articles.items()
         for link in meta['links']
-        if not any(f'{p}{link}.md' in articles or f'{p}{link}' in articles for p in ['concepts/', 'sources/', ''])
+        if not any(f'{p}{link}.md' in articles or f'{p}{link}' in articles for p in ['concepts/', 'entities/', 'sources/', ''])
     )
     orphan_count = sum(
         1 for path in articles
