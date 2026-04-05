@@ -1,4 +1,4 @@
-# 🏭 LLM Wiki
+# LLM Wiki
 
 ### The LLM Knowledge Base workflow Karpathy uses — now a one-command tool
 
@@ -12,68 +12,136 @@ He said:
 
 > *"There is room here for an incredible new product instead of a hacky collection of scripts."*
 
-We turned this methodology into a **Claude Code Skill** — ready to use out of the box.
+We turned this methodology into a **Claude Code Skill** — ready to use out of the box, zero config, zero dependencies.
 
-## 💡 The Idea in One Sentence
+## The Idea in One Sentence
 
-Ever saved 100 papers/articles and never organized them?
+Ever saved 100 papers / 50 tweets / 20 blog posts and never organized them?
 
-**LLM Wiki: you dump files into a folder, AI organizes them into a knowledge base, then you ask questions and get reports — and the more you use it, the smarter it gets.**
+**Dump them in. AI compiles a structured knowledge base. You ask questions, get reports. It grows.**
 
-## 🔄 The Full Workflow
+## The Full Workflow
 
 ```
-📄 Your stuff               🤖 AI compiles             📚 Knowledge base
-papers/articles/code/notes ──→ extracts concepts+links ──→ structured wiki
-                                                           │
-          ┌────────────────────────────────────────────────┘
-          ↓
-    💬 You ask ──→ 🤖 AI researches ──→ 📊 reports / charts / slides
+📄 Your stuff                        🤖 AI compiles              📚 Knowledge base
+papers/articles/code/tweets/urls ──→ extract concepts+links  ──→ structured wiki + Mermaid graph
+                                                                   │
+           ┌───────────────────────────────────────────────────────┘
+           ↓
+     💬 You ask ──→ 🤖 AI researches ──→ 📊 reports / charts / slides
                                              │
                                              ↓
                                       📚 archived back (grows!)
                                              │
                                              ↓
                                 🔍 AI auto-lints (fix · fill · discover)
+                                             │
+                                             ↓
+                                ✅ Trust review (kepano isolation principle)
 ```
 
-**6 stages, mapping to Karpathy's original post:**
+**7 stages, covering Karpathy's full loop:**
 
 | Stage | What happens | What you do |
 |-------|-------------|-------------|
-| ① Ingest | Papers/articles/code go into `raw/`, AI compiles into wiki | Drop files |
-| ② Browse | View the wiki in any editor / Obsidian | Read |
-| ③ Q&A | Ask questions, AI researches and outputs answers | Ask |
-| ④ Flywheel | Outputs auto-archive back into wiki, it grows | Nothing |
-| ⑤ Lint | AI finds contradictions, fills gaps, discovers connections | One click |
-| ⑥ Future | One question → a team of AIs builds an entire knowledge base | Stay tuned |
+| ① Multimodal ingest | Papers/code/webpages/tweets/blogs go into inbox | Drop files or paste URLs |
+| ② Smart compile | AI extracts concepts, entities, cross-doc links + Mermaid graph | One click |
+| ③ Browse | View wiki + Mermaid graphs in Obsidian or any editor | Read |
+| ④ Q&A | Ask questions, AI researches and outputs answers | Ask |
+| ⑤ Flywheel | Outputs auto-archive back into wiki, it grows | Nothing |
+| ⑥ Lint | AI finds contradictions, fills gaps, discovers connections | One click |
+| ⑦ Trust | Human review → export to trusted vault | Review + confirm |
 
 > Karpathy: *"Way beyond a `.decode()`"*
 
-## ❓ FAQ
+## Core Features
 
-**Q: What can I feed into it?**
-A: Anything text-readable — `.md`, `.txt`, `.pdf`, `.py`, `.ipynb`, web clippings... Papers, blogs, code, meeting notes, book summaries, all welcome.
+### Multimodal Knowledge Ingestion
 
-**Q: Do I need Obsidian?**
-A: **No.** Karpathy uses Obsidian as a pretty wiki viewer. This skill only operates on `.md` files — VS Code, Typora, or even `cat` works. Obsidian is a nice bonus (graph view, link jumping) but not required.
+Not just local files — **webpages, tweets, WeChat articles, paper links** all go straight into inbox:
 
-**Q: How is this different from NotebookLM / RAG?**
-A: NotebookLM is read-only — upload docs, ask questions, done. LLM Wiki **grows** — every Q&A output flows back into the wiki. And as Karpathy noted, at ~100 docs scale, you don't even need fancy RAG.
+| Data type | Format | How it works |
+|-----------|--------|-------------|
+| Papers / Articles | PDF, MD, TXT | Direct read |
+| Code / Notes | PY, IPYNB | Direct read |
+| Webpages / Blogs | URL | MCP auto-extracts Markdown |
+| X / Twitter | URL | Auto-extract (prompts manual copy on failure) |
+| WeChat Articles | URL | Auto-extract |
+| YouTube | URL | Prompts user to paste transcript/summary |
 
-## 🚀 Quick Start
+Save URL lists as `.txt` files in inbox, digest handles them in batch. No Chrome plugins, no extra tools — powered by Claude Code's built-in MCP toolchain.
 
-### Install
+### Mermaid Knowledge Graph
+
+Every `compile` auto-generates a **Mermaid knowledge graph**, renders natively in Obsidian:
+
+```mermaid
+graph LR
+    subgraph Concepts
+        attention["Attention Mechanism"]
+        transformer["Transformer"]
+    end
+    subgraph Entities
+        openai["OpenAI"]
+        karpathy["Andrej Karpathy"]
+    end
+    attention --> transformer
+    transformer --> openai
+```
+
+Concepts and entities auto-grouped, auto-linked. Gets denser with every compile.
+
+### Obsidian Native Compatibility
+
+Open `wiki/` directory directly as an **Obsidian Vault**:
+- `[[wiki-links]]` render natively
+- Mermaid graphs supported out of the box
+- Graph View works immediately
+- `trusted/` as your clean daily-use vault
+
+### Smart Content Tiers
+
+Auto-selects processing depth based on content length:
+- **>1000 chars**: Full summary (Summary + Concepts + Entities + Facts + Quotes)
+- **≤1000 chars**: Brief summary (Summary + Concepts only), no padding
+
+### Full Operation Log
+
+Every operation auto-logged to `log.md` — what was digested, which concepts were compiled, which articles were trusted. A git log for your knowledge base.
+
+### 8 Subcommands
+
+```
+/llm-wiki init my-research   # Initialize a project
+/llm-wiki digest             # Digest inbox (files + URLs)
+/llm-wiki compile            # Build wiki + Mermaid graph
+/llm-wiki query "question"   # Query the knowledge base
+/llm-wiki check              # Health check
+/llm-wiki export "topic"     # Export reports/slides
+/llm-wiki trust              # Trust review & export
+/llm-wiki status             # Knowledge base overview
+```
+
+Also supports natural language — no need to memorize commands:
+
+```
+"Help me set up a knowledge base"
+"Digest the new papers and links in inbox"
+"Compile the knowledge base"
+"What does the knowledge base say about attention mechanisms?"
+"Run a health check"
+"What's the status of my knowledge base?"
+```
+
+## Quick Start
+
+### Install (10 seconds)
 
 **Option 1: Just tell Claude Code (easiest)**
-
-Open Claude Code and paste this:
 
 ```
 Install the llm-wiki skill: clone https://github.com/chenly255/llm-wiki.git and symlink llm-wiki/llm-wiki to ~/.claude/skills/llm-wiki
 ```
-
-Claude handles everything. You don't touch the terminal.
 
 **Option 2: One-liner**
 
@@ -82,81 +150,66 @@ git clone https://github.com/chenly255/llm-wiki.git ~/.claude/skills/_llm-wiki-r
 ln -s ~/.claude/skills/_llm-wiki-repo/llm-wiki ~/.claude/skills/llm-wiki
 ```
 
-**Option 3: Manual (custom location)**
-
-```bash
-git clone https://github.com/chenly255/llm-wiki.git /your/path/llm-wiki
-ln -s /your/path/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
-```
-
 ### Usage
 
-After install, just use natural language — no need to memorize commands:
-
 ```
-"Help me set up a knowledge base"
-"Digest the new papers in inbox"
-"Compile the knowledge base"
-"What does the knowledge base say about attention mechanisms?"
-"Run a health check on the wiki"
-"Generate a report on transformers from the knowledge base"
-"Trust the knowledge-flywheel article"
+/llm-wiki init my-research
 ```
 
-Or use slash commands:
+Then drop papers, articles, URL lists into `raw/inbox/` and start compiling.
 
-```
-/llm-wiki init my-research   # Initialize a project
-/llm-wiki digest             # Digest new docs from inbox
-/llm-wiki compile            # Build wiki (extract concepts + entities + links)
-/llm-wiki query "question"   # Query the knowledge base
-/llm-wiki check              # Health check
-/llm-wiki export "topic"     # Export reports/slides
-/llm-wiki trust              # Mark content as trusted
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 your-project/
 ├── raw/
-│   ├── inbox/              # Drop new materials here
-│   └── sources/            # Processed originals (moved here after digest)
-├── wiki/                   # AI-compiled knowledge base (don't touch!)
+│   ├── inbox/              # Drop new materials here (files + URL lists)
+│   └── sources/            # Processed originals
+├── wiki/                   # AI-compiled knowledge base
 │   ├── _index.md           # Master index
-│   ├── _graph.md           # Link graph
+│   ├── _graph.md           # Link graph + Mermaid knowledge graph
 │   ├── concepts/           # Concept articles (ideas, methods, patterns)
 │   ├── entities/           # Entity articles (people, tools, orgs)
 │   └── sources/            # Source summaries
-├── output/                 # AI-generated deliverables
-├── trusted/               # Content you trust (human-verified)
+├── output/                 # AI-generated deliverables (reports/slides)
+├── trusted/                # Human-approved content
+├── log.md                  # Operation log
 └── .kf.md                  # Project config
 ```
 
-## 🔧 Built-in Tools
+## Design Philosophy
 
-| Tool | Purpose |
-|------|---------|
-| `scripts/search.py` | BM25 search engine — helps AI quickly find relevant articles |
-| `scripts/index.py` | Auto-generates index and link graph |
-
-## 🎯 Core Philosophy
-
-In Karpathy's words:
+### Karpathy's Compilation Philosophy
 
 > *"The LLM writes and maintains all of the data of the wiki, I rarely touch it directly."*
 
-**The wiki is the AI's domain, not yours.** You only need to:
-- 🗂️ Drop materials into `raw/`
-- 💬 Ask questions
-- 👀 Review outputs
+The wiki is the AI's domain, not yours. You drop materials, ask questions, review outputs.
 
-The AI handles all the heavy lifting: compiling, categorizing, linking, linting, growing.
+### kepano's Isolation Principle
 
-## 🌟 Credits
+> AI-generated content and human-trusted knowledge must be kept separate.
 
-This project is entirely based on [Andrej Karpathy's LLM Knowledge Bases methodology](https://x.com/karpathy/status/2039805659525644595). If you find this idea compelling, please go like Karpathy's original post.
+`wiki/` is the AI's draft zone — may contain hallucinations. `trusted/` is your逐篇-reviewed export — safe for decision-making.
 
-## 📄 License
+### Zero External Dependencies
+
+No Chroma, no Pinecone, no LlamaIndex. No vector databases. No Chrome plugins. Just **Claude Code + Markdown files**.
+
+At ~100 docs scale, BM25 search + LLM reasoning is enough. Karpathy said so too.
+
+## Built-in Tools
+
+| Tool | Purpose |
+|------|---------|
+| `scripts/search.py` | BM25 search engine for fast article lookup |
+| `scripts/index.py` | Auto-generates index + Mermaid knowledge graph |
+
+## Credits
+
+- [Andrej Karpathy](https://x.com/karpathy/status/2039805659525644595) — LLM Knowledge Bases methodology
+- [kepano](https://x.com/kepano) — AI content isolation principle
+- [sdyckjq-lab/llm-wiki-skill](https://github.com/sdyckjq-lab/llm-wiki-skill) — Inspiration for URL ingestion & Mermaid graphs
+
+## License
 
 MIT
