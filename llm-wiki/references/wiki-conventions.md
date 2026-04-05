@@ -17,7 +17,7 @@
 
 ```markdown
 # {Concept Name in Title Case}
-> Auto-compiled by knowledge-factory.
+> Auto-compiled by llm-wiki.
 
 ## Overview
 {2-5 sentences synthesizing what this concept is, drawn from all sources}
@@ -72,7 +72,7 @@ Use Obsidian-compatible `[[wiki-link]]` syntax:
 
 ```markdown
 # Knowledge Index
-> Auto-maintained by knowledge-factory. Do not edit manually.
+> Auto-maintained by llm-wiki. Do not edit manually.
 
 ## Statistics
 - Total articles: N
@@ -94,7 +94,7 @@ Use Obsidian-compatible `[[wiki-link]]` syntax:
 
 ```markdown
 # Backlink Graph
-> Auto-maintained by knowledge-factory. Do not edit manually.
+> Auto-maintained by llm-wiki. Do not edit manually.
 
 ## Link Map
 | Article | Links to | Linked from |

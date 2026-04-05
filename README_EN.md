@@ -1,4 +1,4 @@
-# 🏭 Knowledge Factory
+# 🏭 LLM Wiki
 
 ### The LLM Knowledge Base workflow Karpathy uses — now a one-command tool
 
@@ -18,7 +18,7 @@ We turned this methodology into a **Claude Code Skill** — ready to use out of 
 
 Ever saved 100 papers/articles and never organized them?
 
-**Knowledge Factory: you dump files into a folder, AI organizes them into a knowledge base, then you ask questions and get reports — and the more you use it, the smarter it gets.**
+**LLM Wiki: you dump files into a folder, AI organizes them into a knowledge base, then you ask questions and get reports — and the more you use it, the smarter it gets.**
 
 ## 🔄 The Full Workflow
 
@@ -59,7 +59,7 @@ A: Anything text-readable — `.md`, `.txt`, `.pdf`, `.py`, `.ipynb`, web clippi
 A: **No.** Karpathy uses Obsidian as a pretty wiki viewer. This skill only operates on `.md` files — VS Code, Typora, or even `cat` works. Obsidian is a nice bonus (graph view, link jumping) but not required.
 
 **Q: How is this different from NotebookLM / RAG?**
-A: NotebookLM is read-only — upload docs, ask questions, done. Knowledge Factory **grows** — every Q&A output flows back into the wiki. And as Karpathy noted, at ~100 docs scale, you don't even need fancy RAG.
+A: NotebookLM is read-only — upload docs, ask questions, done. LLM Wiki **grows** — every Q&A output flows back into the wiki. And as Karpathy noted, at ~100 docs scale, you don't even need fancy RAG.
 
 ## 🚀 Quick Start
 
@@ -67,11 +67,11 @@ A: NotebookLM is read-only — upload docs, ask questions, done. Knowledge Facto
 
 ```bash
 # Option 1: Clone + symlink (recommended, easy to update)
-git clone https://github.com/chenly255/knowledge-factory.git
-ln -s $(pwd)/knowledge-factory/knowledge-factory ~/.claude/skills/knowledge-factory
+git clone https://github.com/chenly255/llm-wiki.git
+ln -s $(pwd)/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 
 # Option 2: Direct copy
-cp -r knowledge-factory/knowledge-factory ~/.claude/skills/knowledge-factory
+cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 ```
 
 ### Usage
@@ -79,12 +79,12 @@ cp -r knowledge-factory/knowledge-factory ~/.claude/skills/knowledge-factory
 In Claude Code:
 
 ```
-/knowledge-factory init          # Initialize a knowledge factory
-/knowledge-factory ingest        # Compile raw/ documents into the wiki
-/knowledge-factory qa "question" # Ask the knowledge base
-/knowledge-factory lint          # Health check
-/knowledge-factory output "topic"# Generate reports/slides
-/knowledge-factory compile       # Full recompilation
+/llm-wiki init          # Initialize a llm wiki
+/llm-wiki ingest        # Compile raw/ documents into the wiki
+/llm-wiki qa "question" # Ask the knowledge base
+/llm-wiki lint          # Health check
+/llm-wiki output "topic"# Generate reports/slides
+/llm-wiki compile       # Full recompilation
 ```
 
 Or use natural language:

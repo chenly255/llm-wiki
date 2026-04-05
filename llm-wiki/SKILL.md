@@ -1,15 +1,15 @@
 ---
-name: knowledge-factory
+name: llm-wiki
 description: >
   Build and maintain LLM-powered personal knowledge bases (inspired by Karpathy's methodology).
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
-  "build a wiki", "organize my notes/papers/articles", "knowledge factory", or uses
-  /knowledge-factory command. Also trigger when user says "整理知识库", "编译wiki",
+  "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
+  /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
   "知识工厂", "帮我整理这些资料". Subcommands: init, ingest, compile, qa, lint, output.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
-# Knowledge Factory
+# LLM Wiki
 
 Build and maintain LLM-powered personal knowledge bases. Raw documents go in, a structured,
 interlinked wiki comes out. The wiki grows smarter with every query, every lint pass, and
@@ -52,7 +52,7 @@ directly.
 
 ### 1. `init` — Initialize a Knowledge Factory
 
-**Usage:** `/knowledge-factory init` or "帮我初始化一个知识工厂"
+**Usage:** `/llm-wiki init` or "帮我初始化一个知识工厂"
 
 **Steps:**
 
@@ -63,7 +63,7 @@ directly.
    ```
 3. Create `.kf.md` config:
    ```markdown
-   # Knowledge Factory Config
+   # LLM Wiki Config
    - Project: {ask user or infer from directory name}
    - Created: {date}
    - Language: {auto or ask user}
@@ -74,7 +74,7 @@ directly.
 4. Create `wiki/_index.md`:
    ```markdown
    # Knowledge Index
-   > Auto-maintained by knowledge-factory. Do not edit manually.
+   > Auto-maintained by llm-wiki. Do not edit manually.
 
    ## Articles
    (none yet — run ingest to populate)
@@ -87,7 +87,7 @@ directly.
 5. Create `wiki/_graph.md`:
    ```markdown
    # Backlink Graph
-   > Auto-maintained by knowledge-factory. Do not edit manually.
+   > Auto-maintained by llm-wiki. Do not edit manually.
 
    (empty — will populate after ingest)
    ```
@@ -97,7 +97,7 @@ directly.
 
 ### 2. `ingest` — Process Raw Documents into Wiki
 
-**Usage:** `/knowledge-factory ingest` or "帮我把 raw/ 里的资料整理进知识库"
+**Usage:** `/llm-wiki ingest` or "帮我把 raw/ 里的资料整理进知识库"
 
 **Steps:**
 
@@ -134,7 +134,7 @@ directly.
    c. **Create or update concept articles** at `wiki/concepts/{concept}.md`:
    ```markdown
    # {Concept Name}
-   > Auto-compiled by knowledge-factory.
+   > Auto-compiled by llm-wiki.
 
    ## Overview
    {What this concept is, synthesized from all sources that mention it}
@@ -172,7 +172,7 @@ directly.
 
 ### 3. `compile` — Full Wiki Recompilation
 
-**Usage:** `/knowledge-factory compile` or "重新编译整个知识库"
+**Usage:** `/llm-wiki compile` or "重新编译整个知识库"
 
 This is a destructive rebuild — it re-reads ALL raw documents and rewrites the entire wiki.
 
@@ -192,14 +192,14 @@ too many incremental inconsistencies.
 
 ### 4. `qa` — Ask the Knowledge Base
 
-**Usage:** `/knowledge-factory qa "your question"` or just ask a question when the skill is active.
+**Usage:** `/llm-wiki qa "your question"` or just ask a question when the skill is active.
 
 **Steps:**
 
 1. Read `wiki/_index.md` to understand the full scope.
 2. Use the search script to find relevant articles:
    ```bash
-   python3 ~/.claude/skills/knowledge-factory/scripts/search.py --wiki-dir wiki/ --query "user's question" --top-k 10
+   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "user's question" --top-k 10
    ```
 3. Read the top relevant articles (up to 5-8 articles depending on size).
 4. Synthesize a comprehensive answer with citations: `[[source-name]]`.
@@ -217,7 +217,7 @@ too many incremental inconsistencies.
 
 ### 5. `lint` — Health Check the Wiki
 
-**Usage:** `/knowledge-factory lint` or "检查一下知识库的健康状况"
+**Usage:** `/llm-wiki lint` or "检查一下知识库的健康状况"
 
 **Steps:**
 
@@ -271,7 +271,7 @@ too many incremental inconsistencies.
 
 ### 6. `output` — Generate Deliverables
 
-**Usage:** `/knowledge-factory output "topic" [format]` or "帮我根据知识库生成一份报告"
+**Usage:** `/llm-wiki output "topic" [format]` or "帮我根据知识库生成一份报告"
 
 **Formats:**
 - `report` (default): Markdown report in `output/reports/`
@@ -317,7 +317,7 @@ paginate: true
 The skill includes a search engine for the wiki:
 
 ```bash
-python3 ~/.claude/skills/knowledge-factory/scripts/search.py \
+python3 ~/.claude/skills/llm-wiki/scripts/search.py \
   --wiki-dir wiki/ \
   --query "search terms" \
   --top-k 10
@@ -333,7 +333,7 @@ See [references/wiki-conventions.md](references/wiki-conventions.md) for detaile
 Key rules:
 - All wiki files use `[[wiki-link]]` syntax for cross-references (Obsidian-compatible)
 - Filenames: lowercase-kebab-case (e.g., `neural-network.md`)
-- Every article starts with `# Title` followed by `> Auto-compiled by knowledge-factory.`
+- Every article starts with `# Title` followed by `> Auto-compiled by llm-wiki.`
 - Source summaries always reference their raw file path
 - Concept articles always list their sources
 - `_index.md` and `_graph.md` are auto-maintained — never edit manually
