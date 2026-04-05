@@ -65,38 +65,54 @@ A: NotebookLM is read-only — upload docs, ask questions, done. LLM Wiki **grow
 
 ### Install
 
-```bash
-# Option 1: Clone + symlink (recommended, easy to update)
-git clone https://github.com/chenly255/llm-wiki.git
-ln -s $(pwd)/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
+**Option 1: Just tell Claude Code (easiest)**
 
-# Option 2: Direct copy
-cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
+Open Claude Code and paste this:
+
+```
+Install the llm-wiki skill: clone https://github.com/chenly255/llm-wiki.git and symlink llm-wiki/llm-wiki to ~/.claude/skills/llm-wiki
+```
+
+Claude handles everything. You don't touch the terminal.
+
+**Option 2: One-liner**
+
+```bash
+git clone https://github.com/chenly255/llm-wiki.git ~/.claude/skills/_llm-wiki-repo && \
+ln -s ~/.claude/skills/_llm-wiki-repo/llm-wiki ~/.claude/skills/llm-wiki
+```
+
+**Option 3: Manual (custom location)**
+
+```bash
+git clone https://github.com/chenly255/llm-wiki.git /your/path/llm-wiki
+ln -s /your/path/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 ```
 
 ### Usage
 
-In Claude Code:
+After install, just use natural language — no need to memorize commands:
 
 ```
-/llm-wiki init my-research   # Initialize a project
-/llm-wiki digest             # Digest new docs from inbox
-/llm-wiki compile            # Build wiki (extract concepts + entities + links)
-/llm-wiki query "question"     # Query the knowledge base
-/llm-wiki check           # Health check
-/llm-wiki export "topic"     # Export reports/slides
-/llm-wiki trust            # Mark content as trusted
-```
-
-Or use natural language:
-
-```
-"Process the new papers in inbox"
+"Help me set up a knowledge base"
+"Digest the new papers in inbox"
 "Compile the knowledge base"
 "What does the knowledge base say about attention mechanisms?"
 "Run a health check on the wiki"
 "Generate a report on transformers from the knowledge base"
 "Trust the knowledge-flywheel article"
+```
+
+Or use slash commands:
+
+```
+/llm-wiki init my-research   # Initialize a project
+/llm-wiki digest             # Digest new docs from inbox
+/llm-wiki compile            # Build wiki (extract concepts + entities + links)
+/llm-wiki query "question"   # Query the knowledge base
+/llm-wiki check              # Health check
+/llm-wiki export "topic"     # Export reports/slides
+/llm-wiki trust              # Mark content as trusted
 ```
 
 ## 📁 Project Structure

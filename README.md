@@ -65,26 +65,53 @@ A: NotebookLM 是只读的——你上传资料，它回答问题，完了。LLM
 
 ### 安装
 
-```bash
-# 方法一：克隆 + 软链接（推荐，方便更新）
-git clone https://github.com/chenly255/llm-wiki.git
-ln -s $(pwd)/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
+**方法一：直接跟 Claude Code 说（最简单）**
 
-# 方法二：直接复制
-cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
+打开 Claude Code，粘贴下面这段话：
+
+```
+帮我安装 llm-wiki skill：从 https://github.com/chenly255/llm-wiki.git 克隆到本地，然后软链接 llm-wiki/llm-wiki 到 ~/.claude/skills/llm-wiki
+```
+
+Claude 会自动帮你搞定，你什么都不用做。
+
+**方法二：一键安装脚本**
+
+```bash
+git clone https://github.com/chenly255/llm-wiki.git ~/.claude/skills/_llm-wiki-repo && \
+ln -s ~/.claude/skills/_llm-wiki-repo/llm-wiki ~/.claude/skills/llm-wiki
+```
+
+**方法三：手动安装（想放在自定义位置）**
+
+```bash
+git clone https://github.com/chenly255/llm-wiki.git /你想放的路径/llm-wiki
+ln -s /你想放的路径/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 ```
 
 ### 使用
 
-在 Claude Code 中：
+安装完后，直接用自然语言就能用——不需要记命令：
+
+```
+"帮我建一个知识库"
+"消化 inbox 里的新论文"
+"编译一下知识库"
+"知识库里关于 attention mechanism 有什么信息？"
+"检查一下知识库健康状况"
+"帮我根据知识库生成一份报告"
+"把知识飞轮那篇文章标记为可信"
+```
+
+也可以用斜杠命令：
 
 ```
 /llm-wiki init my-research   # 初始化知识库项目
 /llm-wiki digest             # 消化 inbox 里的新资料
 /llm-wiki compile            # 编译 wiki（提取概念+实体+建关联）
-/llm-wiki query "问题"          # 对知识库提问
-/llm-wiki check           # 健康检查（找矛盾·补缺·修链接）
-/llm-wiki export "主题"      # 生成报告/幻灯片
+/llm-wiki query "问题"        # 对知识库提问
+/llm-wiki check              # 健康检查（找矛盾·补缺·修链接）
+/llm-wiki export "主题"       # 生成报告/幻灯片
 /llm-wiki trust            # 标记你信任的内容
 ```
 
