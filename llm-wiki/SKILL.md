@@ -50,28 +50,42 @@ directly.
 
 ## Subcommands
 
-### 1. `init` — Initialize a Knowledge Factory
+### 1. `init` — Initialize an LLM Wiki Project
 
 **Usage:** `/llm-wiki init` or "帮我初始化一个知识工厂"
 
 **Steps:**
 
-1. Check if `.kf.md` already exists in the current directory. If yes, inform user and stop.
-2. Create the directory structure:
+1. **Ask the user where to create the project** (MUST ask, do not skip):
+   - "你想把知识工厂建在哪个目录？（直接输入路径，或回车使用当前目录）"
+   - If user provides a path, use that path. Create it if it doesn't exist.
+   - If user presses enter / says "当前目录", use the current working directory.
+
+2. **Ask if the user already has a folder of raw materials**:
+   - "你已经有一个存放资料的文件夹了吗？（输入路径，或回车让我创建一个新的 raw/ 目录）"
+   - If user provides a path, symlink or copy it as the `raw/` source. Record the path in `.kf.md`.
+   - If user says no / presses enter, create a new `raw/` directory.
+
+3. Check if `.kf.md` already exists at the target directory. If yes, inform user and stop.
+
+4. Create the directory structure at the chosen path:
    ```
    mkdir -p raw wiki/concepts wiki/sources output/reports output/slides output/charts
    ```
-3. Create `.kf.md` config:
+
+5. Create `.kf.md` config:
    ```markdown
    # LLM Wiki Config
    - Project: {ask user or infer from directory name}
    - Created: {date}
    - Language: {auto or ask user}
+   - Raw path: {the raw/ path, could be external}
    - Raw sources: 0
    - Wiki articles: 0
    - Last compiled: never
    ```
-4. Create `wiki/_index.md`:
+
+6. Create `wiki/_index.md`:
    ```markdown
    # Knowledge Index
    > Auto-maintained by llm-wiki. Do not edit manually.
@@ -84,14 +98,16 @@ directly.
    - Total sources: 0
    - Last updated: {date}
    ```
-5. Create `wiki/_graph.md`:
+
+7. Create `wiki/_graph.md`:
    ```markdown
    # Backlink Graph
    > Auto-maintained by llm-wiki. Do not edit manually.
 
    (empty — will populate after ingest)
    ```
-6. Report success, remind user to put source documents in `raw/`.
+
+8. Report success, show the project structure, and remind user to put source documents in `raw/`.
 
 ---
 
