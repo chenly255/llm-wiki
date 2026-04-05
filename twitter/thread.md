@@ -65,7 +65,7 @@ Just point it at your raw/ folder and go.
 
 It compiles a wiki, auto-lints, answers your questions, and feeds everything back — exactly the way Karpathy described.
 
-Try it: [skill 安装链接占位]
+Try it: https://github.com/chenly255/knowledge-factory
 
 Inspired by: https://x.com/karpathy/status/2039805659525644595
 
