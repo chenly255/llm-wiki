@@ -115,17 +115,6 @@ ln -s /你想放的路径/llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 /llm-wiki trust            # 标记你信任的内容
 ```
 
-或者直接用自然语言：
-
-```
-"帮我消化 inbox 里的新论文"
-"编译一下知识库"
-"知识库里关于 attention mechanism 有什么信息？"
-"检查一下知识库的健康状况"
-"根据知识库帮我生成一份关于 transformer 的报告"
-"把知识飞轮那篇文章导出来"
-```
-
 ## 📁 目录结构
 
 ```
