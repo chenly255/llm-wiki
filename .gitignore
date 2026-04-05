@@ -4,6 +4,12 @@ wiki/
 output/
 .kf.md
 
+# Internal drafts (not for public)
+twitter/
+xiaohongshu/
+prompt-*.md
+knowledge.md
+
 # OS
 .DS_Store
 Thumbs.db
