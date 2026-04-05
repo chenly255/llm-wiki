@@ -14,38 +14,56 @@ He said:
 
 We turned this methodology into a **Claude Code Skill** — ready to use out of the box.
 
-## 💡 Karpathy's Core Methodology
+## 💡 The Idea in One Sentence
 
-<p align="center">
-  <img src="images/01-pipeline.png" width="500" alt="Knowledge Factory Pipeline"/>
-</p>
+Ever saved 100 papers/articles and never organized them?
 
-1. **Data Ingest** — Papers, articles, code, data go into `raw/`, LLM auto-compiles them into an interlinked wiki
-2. **Obsidian as IDE** — Use Obsidian as the "frontend" to browse the entire knowledge base
-3. **Q&A** — Ask questions against the wiki, LLM researches and outputs reports, slides, charts
-4. **Knowledge Flywheel** — Outputs get filed back into the wiki, creating compound growth
-5. **Linting** — LLM auto-checks: finds contradictions, fills gaps, discovers new connections
-6. **Future** — One question spawns a team of LLMs that auto-build a full knowledge base
+**Knowledge Factory: you dump files into a folder, AI organizes them into a knowledge base, then you ask questions and get reports — and the more you use it, the smarter it gets.**
 
-### The Knowledge Flywheel: Gets Smarter Over Time
+## 🔄 The Full Workflow
 
-<p align="center">
-  <img src="images/02-flywheel.png" width="500" alt="Knowledge Flywheel"/>
-</p>
+```
+📄 Your stuff               🤖 AI compiles             📚 Knowledge base
+papers/articles/code/notes ──→ extracts concepts+links ──→ structured wiki
+                                                           │
+          ┌────────────────────────────────────────────────┘
+          ↓
+    💬 You ask ──→ 🤖 AI researches ──→ 📊 reports / charts / slides
+                                             │
+                                             ↓
+                                      📚 archived back (grows!)
+                                             │
+                                             ↓
+                                🔍 AI auto-lints (fix · fill · discover)
+```
 
-### Future: From Solo to LLM Army
+**6 stages, mapping to Karpathy's original post:**
 
-<p align="center">
-  <img src="images/03-future.png" width="400" alt="Now vs Future"/>
-</p>
+| Stage | What happens | What you do |
+|-------|-------------|-------------|
+| ① Ingest | Papers/articles/code go into `raw/`, AI compiles into wiki | Drop files |
+| ② Browse | View the wiki in any editor / Obsidian | Read |
+| ③ Q&A | Ask questions, AI researches and outputs answers | Ask |
+| ④ Flywheel | Outputs auto-archive back into wiki, it grows | Nothing |
+| ⑤ Lint | AI finds contradictions, fills gaps, discovers connections | One click |
+| ⑥ Future | One question → a team of AIs builds an entire knowledge base | Stay tuned |
 
 > Karpathy: *"Way beyond a `.decode()`"*
+
+## ❓ FAQ
+
+**Q: What can I feed into it?**
+A: Anything text-readable — `.md`, `.txt`, `.pdf`, `.py`, `.ipynb`, web clippings... Papers, blogs, code, meeting notes, book summaries, all welcome.
+
+**Q: Do I need Obsidian?**
+A: **No.** Karpathy uses Obsidian as a pretty wiki viewer. This skill only operates on `.md` files — VS Code, Typora, or even `cat` works. Obsidian is a nice bonus (graph view, link jumping) but not required.
+
+**Q: How is this different from NotebookLM / RAG?**
+A: NotebookLM is read-only — upload docs, ask questions, done. Knowledge Factory **grows** — every Q&A output flows back into the wiki. And as Karpathy noted, at ~100 docs scale, you don't even need fancy RAG.
 
 ## 🚀 Quick Start
 
 ### Install
-
-Copy the `knowledge-factory/` directory to your Claude Code skills directory:
 
 ```bash
 # Option 1: Clone + symlink (recommended, easy to update)
@@ -82,16 +100,16 @@ Or use natural language:
 
 ```
 your-project/
-├── raw/                    # Your source materials (papers, articles, code...)
-├── wiki/                   # LLM-compiled knowledge base (auto-maintained)
-│   ├── _index.md           # Master index: all articles + one-line summaries
-│   ├── _graph.md           # Backlink graph
-│   ├── concepts/           # Concept articles (auto-categorized)
+├── raw/                    # Your source materials
+├── wiki/                   # AI-compiled knowledge base (auto-maintained, don't touch)
+│   ├── _index.md           # Master index: all articles at a glance
+│   ├── _graph.md           # Link graph: who links to whom
+│   ├── concepts/           # Concept articles (AI-categorized)
 │   └── sources/            # Source summaries (one per raw document)
-├── output/                 # Generated deliverables
-│   ├── reports/            # Markdown reports
-│   ├── slides/             # Marp slides
-│   └── charts/             # Charts
+├── output/                 # AI-generated deliverables
+│   ├── reports/
+│   ├── slides/
+│   └── charts/
 └── .kf.md                  # Project config
 ```
 
@@ -99,21 +117,21 @@ your-project/
 
 | Tool | Purpose |
 |------|---------|
-| `scripts/search.py` | BM25 search engine with CLI and JSON output |
-| `scripts/index.py` | Auto-generates index and backlink graph |
+| `scripts/search.py` | BM25 search engine — helps AI quickly find relevant articles |
+| `scripts/index.py` | Auto-generates index and link graph |
 
-## 🎯 Design Philosophy
+## 🎯 Core Philosophy
 
 In Karpathy's words:
 
 > *"The LLM writes and maintains all of the data of the wiki, I rarely touch it directly."*
 
-**The wiki is the LLM's domain.** You only need to:
-- Feed raw materials into `raw/`
-- Ask questions
-- Review outputs
+**The wiki is the AI's domain, not yours.** You only need to:
+- 🗂️ Drop materials into `raw/`
+- 💬 Ask questions
+- 👀 Review outputs
 
-The LLM handles: compiling, organizing, linking, linting, and growing the knowledge base.
+The AI handles all the heavy lifting: compiling, categorizing, linking, linting, growing.
 
 ## 🌟 Credits
 

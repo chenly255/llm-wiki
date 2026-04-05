@@ -10,7 +10,9 @@ xiaohongshu/
 prompt-*.md
 knowledge.md
 
-# OS
+# Images (keep local only)
+images/
+*.png
 .DS_Store
 Thumbs.db
 
