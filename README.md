@@ -79,37 +79,41 @@ cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 在 Claude Code 中：
 
 ```
-/llm-wiki init          # 初始化知识工厂
-/llm-wiki ingest        # 把 raw/ 里的资料编译进 wiki
-/llm-wiki qa "问题"     # 对知识库提问
-/llm-wiki lint          # 健康检查
-/llm-wiki output "主题" # 生成报告/幻灯片
-/llm-wiki compile       # 全量重新编译
+/llm-wiki init my-research   # 初始化知识库项目
+/llm-wiki ingest             # 消化 inbox 里的新资料
+/llm-wiki compile            # 编译 wiki（提取概念+实体+建关联）
+/llm-wiki ask "问题"          # 对知识库提问
+/llm-wiki maintain           # 健康检查（找矛盾·补缺·修链接）
+/llm-wiki output "主题"      # 生成报告/幻灯片
+/llm-wiki promote            # 导出你确认过的内容
 ```
 
 或者直接用自然语言：
 
 ```
-"帮我把 raw/ 里的论文整理进知识库"
+"帮我消化 inbox 里的新论文"
+"编译一下知识库"
 "知识库里关于 attention mechanism 有什么信息？"
 "检查一下知识库的健康状况"
 "根据知识库帮我生成一份关于 transformer 的报告"
+"把知识飞轮那篇文章导出来"
 ```
 
 ## 📁 目录结构
 
 ```
 your-project/
-├── raw/                    # 你的原始素材（论文、文章、代码...）
-├── wiki/                   # AI 编译的知识库（自动维护，你别动）
-│   ├── _index.md           # 主索引：所有文章一览
-│   ├── _graph.md           # 关联图谱：谁链接了谁
-│   ├── concepts/           # 概念文章（AI 自动归类）
-│   └── sources/            # 原文摘要（每份素材一篇）
+├── raw/
+│   ├── inbox/              # 丢新资料到这里
+│   └── sources/            # 已消化的原始文件（ingest 后自动移过来）
+├── wiki/                   # AI 编译的知识库（别动！）
+│   ├── _index.md           # 主索引
+│   ├── _graph.md           # 关联图谱
+│   ├── concepts/           # 概念文章（想法、方法、模式）
+│   ├── entities/           # 实体文章（人物、工具、组织）
+│   └── sources/            # 原文摘要
 ├── output/                 # AI 生成的交付物
-│   ├── reports/            # 报告
-│   ├── slides/             # 幻灯片
-│   └── charts/             # 图表
+├── promoted/               # 你审核通过的内容（你的可信知识）
 └── .kf.md                  # 项目配置
 ```
 

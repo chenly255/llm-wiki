@@ -79,37 +79,41 @@ cp -r llm-wiki/llm-wiki ~/.claude/skills/llm-wiki
 In Claude Code:
 
 ```
-/llm-wiki init          # Initialize a llm wiki
-/llm-wiki ingest        # Compile raw/ documents into the wiki
-/llm-wiki qa "question" # Ask the knowledge base
-/llm-wiki lint          # Health check
-/llm-wiki output "topic"# Generate reports/slides
-/llm-wiki compile       # Full recompilation
+/llm-wiki init my-research   # Initialize a project
+/llm-wiki ingest             # Process new docs from inbox
+/llm-wiki compile            # Build wiki (extract concepts + entities + links)
+/llm-wiki ask "question"     # Ask the knowledge base
+/llm-wiki maintain           # Health check (find issues, fix links)
+/llm-wiki output "topic"     # Generate reports/slides
+/llm-wiki promote            # Export approved content
 ```
 
 Or use natural language:
 
 ```
-"Organize my papers in raw/ into the knowledge base"
+"Process the new papers in inbox"
+"Compile the knowledge base"
 "What does the knowledge base say about attention mechanisms?"
 "Run a health check on the wiki"
 "Generate a report on transformers from the knowledge base"
+"Promote the knowledge-flywheel article"
 ```
 
 ## 📁 Project Structure
 
 ```
 your-project/
-├── raw/                    # Your source materials
-├── wiki/                   # AI-compiled knowledge base (auto-maintained, don't touch)
-│   ├── _index.md           # Master index: all articles at a glance
-│   ├── _graph.md           # Link graph: who links to whom
-│   ├── concepts/           # Concept articles (AI-categorized)
-│   └── sources/            # Source summaries (one per raw document)
+├── raw/
+│   ├── inbox/              # Drop new materials here
+│   └── sources/            # Processed originals (moved here after ingest)
+├── wiki/                   # AI-compiled knowledge base (don't touch!)
+│   ├── _index.md           # Master index
+│   ├── _graph.md           # Link graph
+│   ├── concepts/           # Concept articles (ideas, methods, patterns)
+│   ├── entities/           # Entity articles (people, tools, orgs)
+│   └── sources/            # Source summaries
 ├── output/                 # AI-generated deliverables
-│   ├── reports/
-│   ├── slides/
-│   └── charts/
+├── promoted/               # Content you approved (your trusted knowledge)
 └── .kf.md                  # Project config
 ```
 

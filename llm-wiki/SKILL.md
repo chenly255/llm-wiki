@@ -1,364 +1,348 @@
 ---
 name: llm-wiki
 description: >
-  Build and maintain LLM-powered personal knowledge bases (inspired by Karpathy's methodology).
+  Build and maintain LLM-powered personal knowledge bases (inspired by Karpathy + kepano).
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, ingest, compile, qa, lint, output.
+  "知识工厂", "帮我整理这些资料". Subcommands: init, ingest, compile, ask, maintain, output, promote.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
 # LLM Wiki
 
-Build and maintain LLM-powered personal knowledge bases. Raw documents go in, a structured,
-interlinked wiki comes out. The wiki grows smarter with every query, every lint pass, and
-every output you file back.
+Build and maintain LLM-powered personal knowledge bases.
 
-Inspired by [Karpathy's LLM Knowledge Bases](https://x.com/karpathy/status/2039805659525644595).
-
-## Core Principle
-
-**The wiki is the LLM's domain.** The human feeds raw material and asks questions. The LLM
-compiles, maintains, lints, and grows the knowledge base. The human rarely edits the wiki
-directly.
+Two core principles:
+1. **Karpathy**: Raw docs → LLM "compiles" a structured wiki → Q&A → outputs loop back in.
+2. **kepano (Obsidian CEO)**: AI-generated content must be **isolated** from your trusted knowledge. Only `promote` moves content to your main vault after your explicit approval.
 
 ## Project Structure
 
 ```
 <project-root>/
-├── raw/                    # Source documents (user manages)
-│   ├── papers/
-│   ├── articles/
-│   ├── code/
-│   └── ...
-├── wiki/                   # Compiled wiki (LLM manages)
-│   ├── _index.md           # Master index: list of all articles with 1-line summaries
-│   ├── _graph.md           # Backlink graph: which articles link to which
-│   ├── concepts/           # Concept articles (auto-categorized)
-│   │   ├── concept-name.md
-│   │   └── ...
-│   └── sources/            # Source summaries (1 per raw document)
-│       ├── source-name.md
-│       └── ...
+├── raw/
+│   ├── inbox/              # Drop new materials here (user manages)
+│   └── sources/            # Processed originals (LLM moves here after ingest)
+├── wiki/                   # Compiled wiki (LLM's domain — don't edit manually)
+│   ├── _index.md           # Master index with 1-line summaries
+│   ├── _graph.md           # Backlink graph
+│   ├── concepts/           # Concept articles (ideas, methods, patterns)
+│   ├── entities/           # Entity articles (people, tools, orgs, datasets)
+│   └── sources/            # Source summaries (1 per ingested document)
 ├── output/                 # Generated deliverables
 │   ├── reports/
 │   ├── slides/
 │   └── charts/
+├── promoted/               # Content you approved via `promote` (your trusted knowledge)
 └── .kf.md                  # Project config
 ```
 
-## Subcommands
+## The Pipeline
 
-### 1. `init` — Initialize an LLM Wiki Project
-
-**Usage:** `/llm-wiki init` or "帮我初始化一个知识工厂"
-
-**Steps:**
-
-1. **Ask the user where to create the project** (MUST ask, do not skip):
-   - "你想把知识工厂建在哪个目录？（直接输入路径，或回车使用当前目录）"
-   - If user provides a path, use that path. Create it if it doesn't exist.
-   - If user presses enter / says "当前目录", use the current working directory.
-
-2. **Ask if the user already has a folder of raw materials**:
-   - "你已经有一个存放资料的文件夹了吗？（输入路径，或回车让我创建一个新的 raw/ 目录）"
-   - If user provides a path, symlink or copy it as the `raw/` source. Record the path in `.kf.md`.
-   - If user says no / presses enter, create a new `raw/` directory.
-
-3. Check if `.kf.md` already exists at the target directory. If yes, inform user and stop.
-
-4. Create the directory structure at the chosen path:
-   ```
-   mkdir -p raw wiki/concepts wiki/sources output/reports output/slides output/charts
-   ```
-
-5. Create `.kf.md` config:
-   ```markdown
-   # LLM Wiki Config
-   - Project: {ask user or infer from directory name}
-   - Created: {date}
-   - Language: {auto or ask user}
-   - Raw path: {the raw/ path, could be external}
-   - Raw sources: 0
-   - Wiki articles: 0
-   - Last compiled: never
-   ```
-
-6. Create `wiki/_index.md`:
-   ```markdown
-   # Knowledge Index
-   > Auto-maintained by llm-wiki. Do not edit manually.
-
-   ## Articles
-   (none yet — run ingest to populate)
-
-   ## Statistics
-   - Total articles: 0
-   - Total sources: 0
-   - Last updated: {date}
-   ```
-
-7. Create `wiki/_graph.md`:
-   ```markdown
-   # Backlink Graph
-   > Auto-maintained by llm-wiki. Do not edit manually.
-
-   (empty — will populate after ingest)
-   ```
-
-8. Report success, show the project structure, and remind user to put source documents in `raw/`.
+```
+inbox/ ──ingest──→ sources/    (tag & move)
+                      │
+                   compile     (build wiki)
+                      │
+                      ▼
+                   wiki/       (concepts + entities + source summaries)
+                      │
+              ┌───────┼───────┐
+              ▼       ▼       ▼
+            ask    maintain  output
+              │       │       │
+              └───────┼───────┘
+                      ▼
+                   promote     (you approve → promoted/)
+```
 
 ---
 
-### 2. `ingest` — Process Raw Documents into Wiki
+## Subcommands
 
-**Usage:** `/llm-wiki ingest` or "帮我把 raw/ 里的资料整理进知识库"
+### 1. `init` — Initialize Project
+
+**Usage:** `llm-wiki init <project-name>` or "帮我初始化一个知识库"
 
 **Steps:**
 
-1. Read `.kf.md` to understand project state.
-2. Scan `raw/` recursively for all readable files (.md, .txt, .pdf, .py, .ipynb, etc.).
-3. Read `wiki/_index.md` to know what's already been ingested.
-4. For each **new** raw file (not yet in index):
+1. If `<project-name>` is not provided, ask the user:
+   "给这个知识库起个名字？（如：llm-research、paper-notes）"
 
-   a. **Read** the raw document completely.
+2. **Ask where to create the project** (MUST ask, do not skip):
+   "项目建在哪个目录？（输入路径，或回车用当前目录）"
+
+3. **Ask if user already has a materials folder**:
+   "你已经有一个存资料的文件夹吗？（输入路径，或回车创建新的 inbox）"
+   - If yes: record the path in `.kf.md` as the inbox source.
+
+4. Check if `.kf.md` already exists. If yes, inform and stop.
+
+5. Create directory structure:
+   ```
+   mkdir -p raw/inbox raw/sources wiki/concepts wiki/entities wiki/sources output/reports output/slides output/charts promoted
+   ```
+
+6. Create `.kf.md`:
+   ```markdown
+   # LLM Wiki Config
+   - Project: {name}
+   - Created: {date}
+   - Language: {auto or ask}
+   - Inbox: raw/inbox/
+   - Sources: raw/sources/
+   - Wiki articles: 0
+   - Last ingested: never
+   - Last compiled: never
+   ```
+
+7. Create empty `wiki/_index.md` and `wiki/_graph.md`.
+
+8. Report success, show structure, tell user to drop materials into `raw/inbox/`.
+
+---
+
+### 2. `ingest` — Process Inbox
+
+**Usage:** `llm-wiki ingest` or "帮我消化 inbox 里的新资料"
+
+Ingest only **processes and records** new documents. It does NOT rebuild the wiki — that's `compile`.
+
+**Steps:**
+
+1. Read `.kf.md` to get project state.
+2. Scan `raw/inbox/` for all readable files (.md, .txt, .pdf, .py, .ipynb, etc.).
+3. If inbox is empty, inform user and stop.
+4. For each file in inbox:
+
+   a. **Read** the document.
 
    b. **Create source summary** at `wiki/sources/{slug}.md`:
    ```markdown
    # {Document Title}
-   > Source: `raw/{path}`
+   > Source: `raw/sources/{filename}`
    > Ingested: {date}
    > Type: {paper|article|code|dataset|other}
+   > Status: ingested (pending compile)
 
    ## Summary
-   {3-5 sentence summary of the document}
+   {3-5 sentence summary}
 
    ## Key Concepts
-   - [[concept-a]]: {how this document relates to concept-a}
-   - [[concept-b]]: {how this document relates to concept-b}
+   - [[{concept-a}]]: {relevance}
+   - [[{concept-b}]]: {relevance}
+
+   ## Key Entities
+   - [[{entity-a}]]: {relevance}
+   - [[{entity-b}]]: {relevance}
 
    ## Key Facts
-   - {important fact 1}
-   - {important fact 2}
-   - ...
+   - {fact 1}
+   - {fact 2}
 
    ## Quotes / Key Passages
-   > {notable quote or passage, if applicable}
+   > {notable passage}
    ```
 
-   c. **Create or update concept articles** at `wiki/concepts/{concept}.md`:
+   c. **Move** the file from `raw/inbox/` to `raw/sources/`:
+   ```bash
+   mv raw/inbox/{file} raw/sources/{file}
+   ```
+
+5. Update `.kf.md` with new source count and last-ingested date.
+6. Report: "Ingested N documents. Run `compile` to rebuild the wiki."
+
+**Key rule:** Ingest does NOT create or update concept/entity articles. It only creates source
+summaries and moves files out of inbox. This keeps ingest fast and separable from compile.
+
+---
+
+### 3. `compile` — Build Wiki from Sources
+
+**Usage:** `llm-wiki compile` or "编译知识库"
+
+Compile reads ALL source summaries and builds/rebuilds the concept and entity articles.
+
+**Steps:**
+
+1. Read `wiki/_index.md` to understand current state.
+2. Scan `wiki/sources/` for all source summaries.
+3. Extract all referenced concepts and entities across all sources.
+4. For each **concept** (ideas, methods, patterns, techniques):
+
+   Create or update `wiki/concepts/{concept}.md`:
    ```markdown
    # {Concept Name}
    > Auto-compiled by llm-wiki.
 
    ## Overview
-   {What this concept is, synthesized from all sources that mention it}
+   {Synthesized from all sources that mention this concept}
+
+   ## Key Points
+   - {point 1}
+   - {point 2}
 
    ## Sources
-   - [[sources/{source-a}]]: {what source-a says about this concept}
-   - [[sources/{source-b}]]: {what source-b says about this concept}
+   - [[sources/{source-a}]]: {what this source says}
+   - [[sources/{source-b}]]: {what this source says}
 
    ## Related Concepts
-   - [[concepts/{related-a}]]: {relationship description}
-   - [[concepts/{related-b}]]: {relationship description}
+   - [[{related-concept}]]: {relationship}
+
+   ## Related Entities
+   - [[{related-entity}]]: {relationship}
    ```
 
-   d. If a concept article already exists, **merge** new information into it rather than
-   overwriting. Preserve existing content and add new source references.
+5. For each **entity** (people, tools, organizations, datasets, products):
 
-5. **Rebuild index** (`wiki/_index.md`):
-   - List all articles with 1-line summaries
-   - Update statistics
-
-6. **Rebuild backlink graph** (`wiki/_graph.md`):
-   - Scan all wiki articles for `[[...]]` links
-   - Build a table: `Article → Links to → Linked from`
-
-7. Update `.kf.md` statistics.
-
-**Important rules:**
-- Process documents one at a time to avoid context overflow.
-- For large documents (>1000 lines), summarize in sections.
-- Use `[[wiki-link]]` syntax for cross-references (Obsidian-compatible).
-- Concept names should be lowercase-kebab-case for filenames, Title Case in content.
-- Use the search script to check for existing related concepts before creating new ones.
-
----
-
-### 3. `compile` — Full Wiki Recompilation
-
-**Usage:** `/llm-wiki compile` or "重新编译整个知识库"
-
-This is a destructive rebuild — it re-reads ALL raw documents and rewrites the entire wiki.
-
-**Steps:**
-
-1. Confirm with user: "This will recompile the entire wiki from raw sources. Continue?"
-2. Back up current wiki: `cp -r wiki wiki.bak.{timestamp}`
-3. Clear wiki contents (keep directory structure).
-4. Run full `ingest` on all raw documents.
-5. After completion, run `lint` to verify quality.
-6. Report diff: how many articles changed, added, removed.
-
-**When to use:** After significant changes to raw documents, or when the wiki has accumulated
-too many incremental inconsistencies.
-
----
-
-### 4. `qa` — Ask the Knowledge Base
-
-**Usage:** `/llm-wiki qa "your question"` or just ask a question when the skill is active.
-
-**Steps:**
-
-1. Read `wiki/_index.md` to understand the full scope.
-2. Use the search script to find relevant articles:
-   ```bash
-   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "user's question" --top-k 10
-   ```
-3. Read the top relevant articles (up to 5-8 articles depending on size).
-4. Synthesize a comprehensive answer with citations: `[[source-name]]`.
-5. Ask user: "Should I file this answer into the wiki?"
-   - If yes: save to `wiki/concepts/{topic}.md` or `output/reports/{topic}.md`
-   - Update index and backlinks accordingly.
-
-**Q&A rules:**
-- Always cite which wiki articles you drew from.
-- If the wiki doesn't contain enough information, say so explicitly.
-- Never fabricate information not present in the wiki.
-- Suggest follow-up questions the user might want to explore.
-
----
-
-### 5. `lint` — Health Check the Wiki
-
-**Usage:** `/llm-wiki lint` or "检查一下知识库的健康状况"
-
-**Steps:**
-
-1. Read `wiki/_index.md` and `wiki/_graph.md`.
-2. Run the following checks:
-
-   **a. Broken links:** Scan all articles for `[[...]]` links that point to non-existent articles.
-
-   **b. Orphan articles:** Find articles with no incoming or outgoing links.
-
-   **c. Inconsistencies:** Read related articles and check for contradictory claims.
-   Use the search script to find articles mentioning the same entities.
-
-   **d. Coverage gaps:** Based on concepts mentioned but not having their own article.
-
-   **e. Stale sources:** Check if any source summaries reference raw files that no longer exist.
-
-   **f. Missing backlinks:** If article A references concept B, but B doesn't link back to A.
-
-3. Generate a lint report:
+   Create or update `wiki/entities/{entity}.md`:
    ```markdown
-   # Wiki Health Report — {date}
+   # {Entity Name}
+   > Auto-compiled by llm-wiki.
+   > Type: {person|tool|organization|dataset|product|other}
 
-   ## Summary
-   - Total articles: N
-   - Issues found: N
-   - Health score: N/100
+   ## Overview
+   {Who/what this is, synthesized from all sources}
 
-   ## Broken Links (N)
-   - [[missing-concept]] referenced in [[article-a]], [[article-b]]
+   ## Mentioned In
+   - [[sources/{source-a}]]: {context}
 
-   ## Orphan Articles (N)
-   - [[lonely-article]]: no links in or out
+   ## Related Concepts
+   - [[{concept}]]: {how this entity relates}
 
-   ## Inconsistencies (N)
-   - [[article-a]] says X, but [[article-b]] says Y
-
-   ## Coverage Gaps (N)
-   - "concept-x" mentioned 5 times but has no dedicated article
-
-   ## Suggested Actions
-   1. Create article for "concept-x"
-   2. Add backlink from [[b]] to [[a]]
-   3. Resolve contradiction between [[a]] and [[b]]
+   ## Related Entities
+   - [[{other-entity}]]: {relationship}
    ```
 
-4. Ask user: "Should I auto-fix the issues I can fix? (broken links, missing backlinks, orphans)"
-   - If yes: fix them and re-run lint to verify.
+6. **Rebuild index** (`wiki/_index.md`): list all articles with 1-line summaries.
+7. **Rebuild backlink graph** (`wiki/_graph.md`): scan all `[[...]]` links.
+8. Update `.kf.md` stats and last-compiled date.
+9. Report: how many concepts, entities, and source summaries now exist.
+
+**Rules:**
+- When updating existing articles, **merge** new info — don't overwrite.
+- Use `[[wiki-link]]` for all cross-references.
+- Concepts: lowercase-kebab-case filenames, Title Case in headings.
+- Entities: lowercase-kebab-case filenames.
+- Use search script to avoid creating duplicate articles for the same thing.
+
+---
+
+### 4. `ask` — Ask the Knowledge Base
+
+**Usage:** `llm-wiki ask "your question"` or just ask a question naturally.
+
+**Steps:**
+
+1. Read `wiki/_index.md` for scope.
+2. Search for relevant articles:
+   ```bash
+   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "question" --top-k 10
+   ```
+3. Read top relevant articles (up to 5-8).
+4. Synthesize answer with citations: `[[source-name]]`.
+5. Ask: "Save this answer to the wiki?"
+   - If yes: save to `wiki/concepts/{topic}.md` or `output/reports/{topic}.md`.
+   - Update index and backlinks.
+
+**Rules:**
+- Always cite wiki articles.
+- If the wiki lacks info, say so — never fabricate.
+- Suggest follow-up questions.
+
+---
+
+### 5. `maintain` — Health Check
+
+**Usage:** `llm-wiki maintain` or "检查一下知识库"
+
+**Checks:**
+- **Broken links:** `[[...]]` pointing to non-existent articles.
+- **Orphans:** articles with no links in or out.
+- **Inconsistencies:** contradictory claims across articles.
+- **Coverage gaps:** concepts/entities mentioned but lacking their own article.
+- **Stale sources:** summaries referencing files no longer in `raw/sources/`.
+- **Missing backlinks:** A links to B but B doesn't link back.
+
+**Output:** A health report with score, issues, and suggested fixes.
+Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 
 ---
 
 ### 6. `output` — Generate Deliverables
 
-**Usage:** `/llm-wiki output "topic" [format]` or "帮我根据知识库生成一份报告"
+**Usage:** `llm-wiki output "topic" [format]` or "生成一份报告"
 
 **Formats:**
-- `report` (default): Markdown report in `output/reports/`
+- `report` (default): markdown report in `output/reports/`
 - `slides`: Marp-format slides in `output/slides/`
-- `brief`: 1-page executive summary
+- `brief`: 1-page summary
+
+**Steps:**
+1. Search + read relevant wiki articles.
+2. Generate deliverable.
+3. Save to `output/{format}/{topic-slug}.md`.
+4. Ask: "File key findings back into the wiki?"
+
+---
+
+### 7. `promote` — Export Approved Content
+
+**Usage:** `llm-wiki promote` or "把确认过的内容导出来"
+
+The wiki is AI-generated draft territory. `promote` lets you review and export
+specific articles to `promoted/` — your trusted, human-approved knowledge.
 
 **Steps:**
 
-1. Use search + index to find all relevant articles for the topic.
-2. Read relevant articles.
-3. Generate the deliverable in the requested format.
-4. Save to `output/{format}/{topic-slug}.md`.
-5. Ask user: "Should I file key findings back into the wiki?"
-   - If yes: create/update concept articles with the new synthesis.
+1. Show a list of wiki articles (from `wiki/_index.md`).
+2. Ask user to select which articles to promote (by number or name).
+3. For each selected article:
+   a. Show the full content to the user.
+   b. Ask: "确认导出这篇？(y/n/edit)"
+      - **y**: copy to `promoted/{path}.md` as-is.
+      - **edit**: let user describe changes, apply them, then copy.
+      - **n**: skip.
+4. Report: "Promoted N articles to promoted/."
 
-**Marp slide format:**
-```markdown
----
-marp: true
-theme: default
-paginate: true
----
-
-# {Title}
-
----
-
-## {Section 1}
-
-{content}
+**Why promote exists:**
+- Wiki content is AI-generated, may contain errors or hallucinations.
+- `promoted/` is YOUR vetted knowledge — you've read and approved every article in it.
+- If you use Obsidian or another vault, you can point it at `promoted/` with confidence.
+- This follows kepano's isolation principle: AI drafts and trusted knowledge stay separate.
 
 ---
 
-## {Section 2}
+## Built-in Tools
 
-{content}
-```
-
----
-
-## Search Script
-
-The skill includes a search engine for the wiki:
-
+### Search Script
 ```bash
 python3 ~/.claude/skills/llm-wiki/scripts/search.py \
-  --wiki-dir wiki/ \
-  --query "search terms" \
-  --top-k 10
+  --wiki-dir wiki/ --query "search terms" --top-k 10
 ```
 
-This returns a JSON list of matches with file paths, scores, and relevant snippets.
-Use it to find relevant articles before reading them — saves context window.
+### Index Generator
+```bash
+python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
+```
 
 ## Wiki Conventions
 
 See [references/wiki-conventions.md](references/wiki-conventions.md) for detailed format rules.
 
 Key rules:
-- All wiki files use `[[wiki-link]]` syntax for cross-references (Obsidian-compatible)
-- Filenames: lowercase-kebab-case (e.g., `neural-network.md`)
-- Every article starts with `# Title` followed by `> Auto-compiled by llm-wiki.`
-- Source summaries always reference their raw file path
-- Concept articles always list their sources
-- `_index.md` and `_graph.md` are auto-maintained — never edit manually
+- `[[wiki-link]]` for all cross-references
+- Filenames: lowercase-kebab-case
+- Articles start with `# Title` then `> Auto-compiled by llm-wiki.`
+- `_index.md` and `_graph.md` are auto-maintained
+- **concepts/**: ideas, methods, patterns, techniques
+- **entities/**: people, tools, organizations, datasets, products
 
-## Tips for Users
+## Tips
 
-1. **Start small:** Begin with 5-10 raw documents, run ingest, explore the wiki.
-2. **Ask questions:** Every Q&A session enriches the wiki when you file answers back.
-3. **Lint regularly:** Run lint after every few ingest cycles to keep quality high.
-4. **Use Obsidian:** Open the wiki/ directory in Obsidian for the best reading experience.
-5. **Don't edit the wiki manually:** Let the LLM own it. If you want to add information,
-   put a new document in raw/ and run ingest.
+1. **Drop → Ingest → Compile**: drop files into inbox, ingest to process, compile to build wiki.
+2. **Ask often**: every answer can feed back into the wiki.
+3. **Maintain regularly**: catch issues before they compound.
+4. **Promote carefully**: only export what you've actually reviewed.
+5. **Don't edit wiki/ manually**: that's the LLM's domain. Add info via raw/inbox/.
