@@ -58,18 +58,21 @@ papers/articles/code/tweets/urls ──→ extract concepts+links  ──→ str
 
 ### Multimodal Knowledge Ingestion
 
-Not just local files — **webpages, tweets, WeChat articles, paper links** all go straight into inbox:
+Not just local files — **webpages, tweets, paper links** all go straight into inbox, batch-digested in one command:
 
-| Data type | Format | How it works |
-|-----------|--------|-------------|
-| Papers / Articles | PDF, MD, TXT | Direct read |
-| Code / Notes | PY, IPYNB | Direct read |
-| Webpages / Blogs | URL | MCP auto-extracts Markdown |
-| X / Twitter | URL | Auto-extract (prompts manual copy on failure) |
-| WeChat Articles | URL | Auto-extract |
-| YouTube | URL | Prompts user to paste transcript/summary |
+| Source | Extraction | Status |
+|--------|-----------|--------|
+| PDF / Local files | Direct read | ✅ Supported |
+| Code / Notes (PY, IPYNB) | Direct read | ✅ Supported |
+| Plain text paste | Direct use | ✅ Supported |
+| Webpages / Blogs / Medium | web_reader auto-extracts Markdown | ✅ Supported |
+| X / Twitter | web_reader auto-extracts | ✅ Supported |
+| YouTube | web_reader extracts metadata (title/chapters/description) | ⚠️ Partial (transcripts TBD) |
+| WeChat Articles | tavily_extract (requires production key) | 🔧 Pending |
+| Zhihu | Anti-scraping block, suggest manual copy | 🔧 TBD |
+| Xiaohongshu | Install [xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp) (free, needs Cookie) | 🔧 Available |
 
-Save URL lists as `.txt` files in inbox, digest handles them in batch. No Chrome plugins, no extra tools — powered by Claude Code's built-in MCP toolchain.
+Save URL lists as `.txt` files in inbox, digest handles them in batch. Most scenarios require zero extra tools — powered by Claude Code's built-in MCP toolchain.
 
 ### Mermaid Knowledge Graph
 

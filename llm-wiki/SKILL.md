@@ -78,11 +78,13 @@ https://youtube.com/watch?v=xxxxx
 
 | Domain | Primary Tool | Fallback |
 |--------|-------------|----------|
-| `x.com` / `twitter.com` | `tavily_extract` (extract_depth: advanced) | Prompt user to copy content manually |
-| `youtube.com` | — | No free reliable option — prompt user to provide transcript/summary |
-| `mp.weixin.qq.com` | `web_reader` | `tavily_extract` |
+| `x.com` / `twitter.com` | `web_reader` | Prompt user to copy content manually |
+| `youtube.com` | `web_reader` (extracts metadata: title, chapters, description) | Prompt user to paste transcript/summary |
+| `mp.weixin.qq.com` | `tavily_extract` | Prompt user to copy content manually |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
-| Other (blogs, docs) | `web_reader` | `tavily_extract` |
+| `zhihu.com` | — | Anti-scraping blocks extraction — prompt user to copy content manually |
+| `xiaohongshu.com` | — | Requires xiaohongshu-mcp (external) — prompt user to copy content manually |
+| Other (blogs, docs, Medium) | `web_reader` | `tavily_extract` |
 
 ### Extraction Rules
 
