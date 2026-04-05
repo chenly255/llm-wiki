@@ -183,13 +183,105 @@ def generate_index(articles: dict, backlinks: dict) -> str:
     return '\n'.join(lines)
 
 
+def _mermaid_safe_id(name: str) -> str:
+    """Convert a name to a Mermaid-safe node ID."""
+    return re.sub(r'[^a-zA-Z0-9]', '_', name)
+
+
+def _resolve_link_target(link: str, articles: dict) -> str | None:
+    """Resolve a [[wiki-link]] to an existing article path, or None."""
+    if link.endswith('.md'):
+        link = link[:-3]
+    for prefix in ['concepts/', 'entities/', 'sources/', '']:
+        candidate = f'{prefix}{link}.md'
+        if candidate in articles:
+            return candidate
+    return None
+
+
+def generate_mermaid_graph(articles: dict, backlinks: dict, max_nodes: int = 50) -> str:
+    """Generate a Mermaid knowledge graph for Obsidian rendering."""
+    # Only include concepts and entities as nodes (sources make it too noisy)
+    node_articles = {k: v for k, v in articles.items()
+                     if k.startswith(('concepts/', 'entities/'))}
+
+    if not node_articles:
+        return ''
+
+    # If too many nodes, keep only the most connected ones
+    if len(node_articles) > max_nodes:
+        # Sort by total links (outgoing + incoming)
+        def connectivity(path):
+            out = len(node_articles[path]['links'])
+            inc = len(backlinks.get(path, []))
+            return out + inc
+        sorted_paths = sorted(node_articles.keys(), key=connectivity, reverse=True)
+        node_articles = {k: node_articles[k] for k in sorted_paths[:max_nodes]}
+
+    node_set = set(node_articles.keys())
+    edges = set()
+    all_resolved = set(node_set)
+
+    # Collect edges from outgoing links
+    for path, meta in node_articles.items():
+        for link in meta['links']:
+            target = _resolve_link_target(link, node_articles)
+            if target and target in node_set and target != path:
+                edges.add((path, target))
+                all_resolved.add(target)
+
+    lines = [
+        '## Knowledge Graph',
+        '',
+        '```mermaid',
+        'graph LR',
+    ]
+
+    # Subgraphs by type
+    concepts = sorted(p for p in node_articles if p.startswith('concepts/'))
+    entities = sorted(p for p in node_articles if p.startswith('entities/'))
+
+    if concepts:
+        lines.append('    subgraph Concepts')
+        for path in concepts:
+            name = path.replace('concepts/', '').replace('.md', '')
+            mid = _mermaid_safe_id(name)
+            # Truncate long names for readability
+            display = name[:25] + '...' if len(name) > 25 else name
+            lines.append(f'        {mid}["{display}"]')
+        lines.append('    end')
+
+    if entities:
+        lines.append('')
+        lines.append('    subgraph Entities')
+        for path in entities:
+            name = path.replace('entities/', '').replace('.md', '')
+            mid = _mermaid_safe_id(name)
+            display = name[:25] + '...' if len(name) > 25 else name
+            lines.append(f'        {mid}["{display}"]')
+        lines.append('    end')
+
+    # Edges — use short names to match node IDs
+    if edges:
+        lines.append('')
+        for src, tgt in sorted(edges):
+            src_short = src.split('/')[-1].replace('.md', '')
+            tgt_short = tgt.split('/')[-1].replace('.md', '')
+            src_id = _mermaid_safe_id(src_short)
+            tgt_id = _mermaid_safe_id(tgt_short)
+            lines.append(f'    {src_id} --> {tgt_id}')
+
+    lines.extend(['```', ''])
+    return '\n'.join(lines)
+
+
 def generate_graph(articles: dict, backlinks: dict) -> str:
     """Generate _graph.md content."""
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     lines = [
         '# Backlink Graph',
-        '> Auto-maintained by knowledge-factory. Do not edit manually.',
+        '> Auto-maintained by llm-wiki. Do not edit manually.',
         f'> Last updated: {now}',
         '',
         '## Link Map',
@@ -214,13 +306,8 @@ def generate_graph(articles: dict, backlinks: dict) -> str:
     broken = []
     for path, meta in articles.items():
         for link in meta['links']:
-            resolved = False
-            for prefix in ['concepts/', 'entities/', 'sources/', '']:
-                candidate = f'{prefix}{link}.md' if not link.endswith('.md') else f'{prefix}{link}'
-                if candidate in all_paths:
-                    resolved = True
-                    break
-            if not resolved:
+            target = _resolve_link_target(link, articles)
+            if target is None:
                 broken.append((link, path))
 
     if broken:
@@ -242,6 +329,12 @@ def generate_graph(articles: dict, backlinks: dict) -> str:
             lines.append(f'- {o}')
 
     lines.append('')
+
+    # Append Mermaid knowledge graph
+    mermaid = generate_mermaid_graph(articles, backlinks)
+    if mermaid:
+        lines.append(mermaid)
+
     return '\n'.join(lines)
 
 

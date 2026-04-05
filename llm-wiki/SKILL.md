@@ -5,7 +5,7 @@ description: >
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust.
+  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
@@ -22,11 +22,11 @@ Two core principles:
 ```
 <project-root>/
 ├── raw/
-│   ├── inbox/              # Drop new materials here (user manages)
+│   ├── inbox/              # Drop new materials here (files OR url-list files)
 │   └── sources/            # Processed originals (LLM moves here after ingest)
 ├── wiki/                   # Compiled wiki (LLM's domain — don't edit manually)
 │   ├── _index.md           # Master index with 1-line summaries
-│   ├── _graph.md           # Backlink graph
+│   ├── _graph.md           # Backlink graph + Mermaid knowledge graph
 │   ├── concepts/           # Concept articles (ideas, methods, patterns)
 │   ├── entities/           # Entity articles (people, tools, orgs, datasets)
 │   └── sources/            # Source summaries (1 per digested document)
@@ -35,27 +35,70 @@ Two core principles:
 │   ├── slides/
 │   └── charts/
 ├── trusted/               # Content you approved via `trust` (your trusted knowledge)
+├── log.md                  # Operation log (auto-maintained)
 └── .kf.md                  # Project config
 ```
 
 ## The Pipeline
 
 ```
-inbox/ ──digest──→ sources/    (tag & move)
-                      │
-                   compile     (build wiki)
-                      │
-                      ▼
-                   wiki/       (concepts + entities + source summaries)
-                      │
-              ┌───────┼───────┐
-              ▼       ▼       ▼
-           query    check    export
-              │       │       │
-              └───────┼───────┘
-                      ▼
-                    trust     (you approve → trusted/)
+inbox/ (files + URLs) ──digest──→ sources/    (tag & move)
+                                │
+                             compile     (build wiki)
+                                │
+                                ▼
+                             wiki/       (concepts + entities + source summaries + Mermaid graph)
+                                │
+                        ┌───────┼───────┐
+                        ▼       ▼       ▼
+                     query    check    export
+                        │       │       │
+                        └───────┼───────┘
+                                ▼
+                              trust     (you approve → trusted/)
 ```
+
+---
+
+## URL Handling
+
+llm-wiki supports ingesting content from URLs. Users can drop URL list files into `raw/inbox/`.
+
+### URL List File Format
+
+A `.txt` or `.md` file in inbox where each line is a URL:
+```
+https://x.com/karpathy/status/2039805659525644595
+https://mp.weixin.qq.com/s/xxxxx
+https://arxiv.org/abs/2401.00001
+https://youtube.com/watch?v=xxxxx
+```
+
+### Extraction Strategy (by domain)
+
+| Domain | Primary Tool | Fallback |
+|--------|-------------|----------|
+| `x.com` / `twitter.com` | `tavily_extract` (extract_depth: advanced) | Prompt user to copy content manually |
+| `youtube.com` | — | No free reliable option — prompt user to provide transcript/summary |
+| `mp.weixin.qq.com` | `web_reader` | `tavily_extract` |
+| `arxiv.org` | `web_reader` | `tavily_extract` |
+| Other (blogs, docs) | `web_reader` | `tavily_extract` |
+
+### Extraction Rules
+
+1. For **each URL**, try the primary tool first. If it returns meaningful content (>100 chars), use it.
+2. If primary tool fails or returns too little content, try the fallback.
+3. If both fail, log the failure and skip with a note: tell the user after digest which URLs failed.
+4. Extracted content is treated as the "document" for source summary creation.
+5. For X/Twitter: if extraction fails, tell the user:
+   > "无法自动提取该 X 链接内容。请在浏览器中打开链接，复制全文粘贴给我，我会手动处理。"
+
+### URL Source Naming
+
+- Source slug: derive from URL or page title.
+  - `x.com/karpathy/status/123` → `karpathy-tweet-123`
+  - `mp.weixin.qq.com/s/xxx` → `{page-title-slug}`
+  - `arxiv.org/abs/2401.00001` → `arxiv-2401-00001`
 
 ---
 
@@ -80,7 +123,7 @@ inbox/ ──digest──→ sources/    (tag & move)
 4. Check if `.kf.md` already exists. If yes, inform and stop.
 
 5. Create directory structure:
-   ```
+   ```bash
    mkdir -p raw/inbox raw/sources wiki/concepts wiki/entities wiki/sources output/reports output/slides output/charts trusted
    ```
 
@@ -97,9 +140,11 @@ inbox/ ──digest──→ sources/    (tag & move)
    - Last compiled: never
    ```
 
-7. Create empty `wiki/_index.md` and `wiki/_graph.md`.
+7. Create empty `wiki/_index.md`, `wiki/_graph.md`, and `log.md`.
 
-8. Report success, show structure, tell user to drop materials into `raw/inbox/`.
+8. Report success, show structure, tell user to drop materials (files or URL lists) into `raw/inbox/`.
+
+9. **Log:** append `[init] Project "{name}" created at {path}` to `log.md`.
 
 ---
 
@@ -114,11 +159,23 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
 1. Read `.kf.md` to get project state.
 2. Scan `raw/inbox/` for all readable files (.md, .txt, .pdf, .py, .ipynb, etc.).
 3. If inbox is empty, inform user and stop.
-4. For each file in inbox:
+
+4. **Classify each inbox file:**
+   - **URL list file**: a file where most non-empty lines are URLs (start with `http://` or `https://`). Each URL becomes a separate source.
+   - **Regular file**: any other file. Treated as a single document source.
+
+5. **Process with batch progress:** for every 5 items processed, report:
+   > "已处理 5/{total}..."
+
+6. **For each regular file:**
 
    a. **Read** the document.
 
-   b. **Create source summary** at `wiki/sources/{slug}.md`:
+   b. **Determine processing tier** by content length:
+      - **Full processing** (>1000 chars): create complete source summary with all sections.
+      - **Simplified processing** (≤1000 chars): create a brief summary — skip "Key Facts" and "Quotes" sections.
+
+   c. **Create source summary** at `wiki/sources/{slug}.md`:
    ```markdown
    # {Document Title}
    > Source: `raw/sources/{filename}`
@@ -145,13 +202,38 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
    > {notable passage}
    ```
 
-   c. **Move** the file from `raw/inbox/` to `raw/sources/`:
+   d. **Move** the file from `raw/inbox/` to `raw/sources/`:
    ```bash
    mv raw/inbox/{file} raw/sources/{file}
    ```
 
-5. Update `.kf.md` with new source count and last-digested date.
-6. Report: "Digested N documents. Run `compile` to rebuild the wiki."
+7. **For each URL** (extracted from URL list files):
+
+   a. **Route to extraction tool** based on domain (see [URL Handling](#url-handling)).
+
+   b. **Extract content.** If extraction succeeds:
+      - Treat extracted markdown as the document content.
+      - Determine processing tier by content length.
+      - Create source summary with `> Source: {url}` (not a local file path).
+      - **Move** the URL list file to `raw/sources/` after all its URLs are processed.
+
+   c. If extraction fails:
+      - Record the failure.
+      - Do NOT create a source summary.
+      - Continue with next URL.
+
+8. After processing all items, **report summary:**
+   - "Digested N files and M URLs. (K URLs failed — see details above)"
+   - List any failed URLs with the suggested action.
+
+9. Update `.kf.md` with new source count and last-digested date.
+
+10. **Log:** append to `log.md`:
+    ```
+    [{date}] digest: processed {n_files} files, {n_urls} URLs ({n_failed} failed)
+    - Sources: {list of source slugs}
+    - Failed URLs: {list of failed URLs, if any}
+    ```
 
 **Key rule:** Digest does NOT create or update concept/entity articles. It only creates source
 summaries and moves files out of inbox. This keeps digest fast and separable from compile.
@@ -216,7 +298,10 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
    ```
 
 6. **Rebuild index** (`wiki/_index.md`): list all articles with 1-line summaries.
-7. **Rebuild backlink graph** (`wiki/_graph.md`): scan all `[[...]]` links.
+7. **Rebuild backlink graph** (`wiki/_graph.md`): run the index script to update tables + Mermaid graph.
+   ```bash
+   python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
+   ```
 8. Update `.kf.md` stats and last-compiled date.
 9. Report: how many concepts, entities, and source summaries now exist.
 
@@ -226,6 +311,13 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 - Concepts: lowercase-kebab-case filenames, Title Case in headings.
 - Entities: lowercase-kebab-case filenames.
 - Use search script to avoid creating duplicate articles for the same thing.
+
+10. **Log:** append to `log.md`:
+    ```
+    [{date}] compile: {n_concepts} concepts, {n_entities} entities, {n_sources} sources
+    - New: {list of new article slugs}
+    - Updated: {list of updated article slugs}
+    ```
 
 ---
 
@@ -251,6 +343,11 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 - If the wiki lacks info, say so — never fabricate.
 - Suggest follow-up questions.
 
+**Log:** append query and result type to `log.md`:
+```
+[{date}] query: "{question}" → {n_results} results, answer saved: {yes/no}
+```
+
 ---
 
 ### 5. `check` — Health Check
@@ -267,6 +364,11 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 **Output:** A health report with score, issues, and suggested fixes.
 Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
+
+**Log:** append to `log.md`:
+```
+[{date}] check: score {score}/100, {n_issues} issues found, {n_fixed} auto-fixed
+```
 
 ---
 
@@ -285,9 +387,14 @@ Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 3. Save to `output/{format}/{topic-slug}.md`.
 4. Ask: "File key findings back into the wiki?"
 
+**Log:** append to `log.md`:
+```
+[{date}] export: "{topic}" as {format} → output/{format}/{slug}.md
+```
+
 ---
 
-### 7. `trust` — Trust — Approve Content
+### 7. `trust` — Approve Content
 
 **Usage:** `llm-wiki trust` or "把确认过的内容导出来"
 
@@ -312,6 +419,48 @@ specific articles to `trusted/` — your trusted, human-approved knowledge.
 - If you use Obsidian or another vault, you can point it at `trusted/` with confidence.
 - This follows kepano's isolation principle: AI drafts and trusted knowledge stay separate.
 
+**Log:** append to `log.md`:
+```
+[{date}] trust: {n} articles approved → trusted/
+- {list of trusted article paths}
+```
+
+---
+
+### 8. `status` — Knowledge Base Status
+
+**Usage:** `llm-wiki status` or "知识库什么状态了"
+
+Display a quick overview of the knowledge base.
+
+**Steps:**
+
+1. Read `.kf.md`, `wiki/_index.md`, and `log.md`.
+2. Display:
+
+```
+## llm-wiki Status — {project-name}
+
+### Statistics
+- Concepts:     {n}
+- Entities:     {n}
+- Sources:      {n}
+- Total words:  ~{n}
+- Inbox items:  {n} (unread files in raw/inbox/)
+
+### Timeline
+- Created:      {date}
+- Last digest:  {date}
+- Last compile: {date}
+- Last action:  {most recent log entry}
+
+### Health
+- Broken links: {n}
+- Orphans:      {n}
+```
+
+3. If inbox has items, remind: "Inbox 中有 {n} 个未处理的文件，运行 `digest` 处理。"
+
 ---
 
 ## Built-in Tools
@@ -327,6 +476,11 @@ python3 ~/.claude/skills/llm-wiki/scripts/search.py \
 python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
 ```
 
+### Stats Only
+```bash
+python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/ --stats-only
+```
+
 ## Wiki Conventions
 
 See [references/wiki-conventions.md](references/wiki-conventions.md) for detailed format rules.
@@ -338,11 +492,14 @@ Key rules:
 - `_index.md` and `_graph.md` are auto-maintained
 - **concepts/**: ideas, methods, patterns, techniques
 - **entities/**: people, tools, organizations, datasets, products
+- `_graph.md` includes a Mermaid knowledge graph section (Obsidian-compatible)
 
 ## Tips
 
-1. **Drop → Digest → Compile**: drop files into inbox, digest to process, compile to build wiki.
+1. **Drop → Digest → Compile**: drop files or URL lists into inbox, digest to process, compile to build wiki.
 2. **Query often**: every answer can feed back into the wiki.
 3. **Check regularly**: catch issues before they compound.
 4. **Trust carefully**: only export what you've actually reviewed.
 5. **Don't edit wiki/ manually**: that's the LLM's domain. Add info via raw/inbox/.
+6. **Obsidian compatible**: the `wiki/` directory uses Obsidian-native `[[wiki-link]]` syntax and Mermaid graphs. Open it directly as an Obsidian vault for visual browsing. The `trusted/` folder is your clean, human-approved vault — safe for Obsidian daily use.
+7. **Track changes**: check `log.md` to see what changed and when. Every operation is recorded.
