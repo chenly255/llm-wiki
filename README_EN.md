@@ -62,11 +62,12 @@ Not just local files — **webpages, tweets, paper links** all go straight into 
 
 | Source | Extraction | Status |
 |--------|-----------|--------|
-| PDF / Local files | Direct read | ✅ Supported |
+| PDF / Local files | Read tool direct extract (zero config); optional [pymupdf4llm](https://github.com/pymupdf/pymupdf4llm) / [MinerU](https://github.com/opendatalab/MinerU) for high-fidelity | ✅ Supported |
 | Code / Notes (PY, IPYNB) | Direct read | ✅ Supported |
 | Plain text paste | Direct use | ✅ Supported |
 | Webpages / Blogs / Medium | web_reader auto-extracts Markdown | ✅ Supported |
 | X / Twitter | web_reader auto-extracts | ✅ Supported |
+| GitHub / GitLab repos | GitHub MCP extracts tree + README + key code, LLM generates structured overview | ✅ Supported |
 | YouTube | web_reader extracts metadata (title/chapters/description) | ⚠️ Partial (transcripts TBD) |
 | WeChat Articles | tavily_extract (requires production key) | 🔧 Pending |
 | Zhihu | Anti-scraping block, suggest manual copy | 🔧 TBD |

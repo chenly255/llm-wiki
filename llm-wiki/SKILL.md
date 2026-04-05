@@ -84,7 +84,37 @@ https://youtube.com/watch?v=xxxxx
 | `arxiv.org` | `web_reader` | `tavily_extract` |
 | `zhihu.com` | — | Anti-scraping blocks extraction — prompt user to copy content manually |
 | `xiaohongshu.com` | — | Requires xiaohongshu-mcp (external) — prompt user to copy content manually |
+| `github.com` / `gitlab.com` | GitHub MCP (`get_file_contents` for tree + README + key files) | `git clone` + Bash + Read |
 | Other (blogs, docs, Medium) | `web_reader` | `tavily_extract` |
+
+### PDF Processing
+
+PDF files in `raw/inbox/` are processed with a tiered strategy:
+
+1. **Default (zero config)**: Use the Read tool to extract PDF text content. Works for born-digital PDFs with text layers.
+2. **Enhanced (pymupdf4llm)**: If `pymupdf4llm` is installed (`pip install pymupdf4llm`), use it for better Markdown output with structure preservation. Lightweight, no GPU required.
+3. **Best quality (MinerU)**: If MinerU is installed (`pip install magic-pdf[full]`), use it for academic papers with formulas, tables, and figures. Converts formulas to LaTeX. GPU recommended but not required.
+4. **Manual fallback**: If all automated methods fail or produce poor results, prompt the user to provide the paper's arXiv page or manually paste key sections.
+
+Detection order: try pymupdf4llm → try MinerU → fall back to Read tool.
+
+### Code Repository Processing
+
+When a GitHub/GitLab URL is detected in inbox (or user provides a repo URL):
+
+1. **Detect repo URLs**: any URL matching `github.com/{owner}/{repo}` or `gitlab.com/{owner}/{repo}`.
+2. **Extract via GitHub MCP** (for GitHub repos):
+   - Get directory tree: `get_file_contents` with the repo root
+   - Get README: `get_file_contents` for README.md
+   - Get config files: `package.json`, `pyproject.toml`, `Cargo.toml`, `Makefile`, `Dockerfile`
+   - Get docs: `docs/` directory contents
+   - Get key source files: `__init__.py`, `index.ts`, `main.py`, entry points
+3. **Local repo fallback**: if URL is a local path or clone is needed, use `git clone` then Bash (`tree -L 3`) + Glob + Read.
+4. **Generate structured output** — create two files in `raw/inbox/`:
+   - `repo-{name}-overview.md`: repo metadata, directory tree, README summary, architecture overview, dependencies, key config
+   - `repo-{name}-code.md`: entry points, core modules, public APIs/interfaces
+5. These files are then processed by the normal digest flow as regular markdown files.
+6. During compile, repo sources create an `entity` article (tool/project type) rather than splitting into separate concepts.
 
 ### Extraction Rules
 
@@ -164,12 +194,13 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
 
 4. **Classify each inbox file:**
    - **URL list file**: a file where most non-empty lines are URLs (start with `http://` or `https://`). Each URL becomes a separate source.
-   - **Regular file**: any other file. Treated as a single document source.
+   - **PDF file** (`.pdf`): processed with PDF tiered strategy (see [PDF Processing](#pdf-processing)).
+   - **Regular file**: any other file (.md, .txt, .py, .ipynb, etc.). Treated as a single document source.
 
 5. **Process with batch progress:** for every 5 items processed, report:
    > "已处理 5/{total}..."
 
-6. **For each regular file:**
+6. **For each regular file (non-PDF, non-URL):**
 
    a. **Read** the document.
 
@@ -224,17 +255,33 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
       - Do NOT create a source summary.
       - Continue with next URL.
 
-8. After processing all items, **report summary:**
-   - "Digested N files and M URLs. (K URLs failed — see details above)"
-   - List any failed URLs with the suggested action.
+8. **For each PDF file** in inbox:
 
-9. Update `.kf.md` with new source count and last-digested date.
+   a. **Try pymupdf4llm** (if installed): run `pymupdf4llm.to_markdown("path/to/file.pdf")` to convert.
+   b. If pymupdf4llm not available, **try MinerU** (if installed): run `magic-pdf` to convert.
+   c. If neither is installed, **use the Read tool** to extract text (works for born-digital PDFs).
+   d. If all methods fail or produce poor results (<200 chars), prompt the user to provide an alternative (arXiv URL, manual paste).
+   e. Convert the extracted text to a source summary with `> Source: raw/sources/{filename}`.
+   f. **Move** the PDF to `raw/sources/`.
 
-10. **Log:** append to `log.md`:
+9. **For each GitHub/GitLab repo URL** (from URL list files):
+
+   a. **Extract via GitHub MCP** (GitHub repos): get tree, README, config files, key source files.
+   b. For local paths or GitLab: `git clone` then `tree -L 3` + Glob + Read.
+   c. **Generate** `repo-{name}-overview.md` and `repo-{name}-code.md` in `raw/inbox/`.
+   d. These generated files will be picked up as regular markdown files in the next digest cycle.
+
+10. After processing all items, **report summary:**
+    - "Digested N files, M URLs, P PDFs, R repos. (K items failed — see details above)"
+    - List any failures with the suggested action.
+
+11. Update `.kf.md` with new source count and last-digested date.
+
+12. **Log:** append to `log.md`:
     ```
-    [{date}] digest: processed {n_files} files, {n_urls} URLs ({n_failed} failed)
+    [{date}] digest: processed {n_files} files, {n_urls} URLs, {n_pdfs} PDFs, {n_repos} repos ({n_failed} failed)
     - Sources: {list of source slugs}
-    - Failed URLs: {list of failed URLs, if any}
+    - Failed: {list of failed items, if any}
     ```
 
 **Key rule:** Digest does NOT create or update concept/entity articles. It only creates source
