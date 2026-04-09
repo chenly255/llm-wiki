@@ -17,6 +17,60 @@ Two core principles:
 1. **Karpathy**: Raw docs → LLM "compiles" a structured wiki → Q&A → outputs loop back in.
 2. **kepano (Obsidian CEO)**: AI-generated content must be **isolated** from your trusted knowledge. Only `trust` moves content to your main vault after your explicit approval.
 
+---
+
+## Global Configuration
+
+llm-wiki uses a global config file to remember the user's knowledge base path across sessions.
+
+**Config file:** `~/.claude/llm-wiki.json`
+
+```json
+{
+  "wiki_path": "/absolute/path/to/your/knowledge-base"
+}
+```
+
+### Locate Wiki Procedure (MUST follow for ALL subcommands except `init`)
+
+Every subcommand (digest, compile, query, check, export, trust, status) MUST locate the wiki before doing anything. Follow this order:
+
+1. **Check global config**: read `~/.claude/llm-wiki.json`. If it exists and `wiki_path` points to a directory with a valid `.kf.md`, use it.
+2. **Check current directory**: if no global config, look for `.kf.md` in the current working directory.
+3. **Ask the user**: if neither works, tell the user:
+   > "未找到知识库配置。请告诉我你的知识库路径，或运行 `init` 创建一个新的。"
+   
+   After the user provides a path, validate it (check for `.kf.md`), then **save it to `~/.claude/llm-wiki.json`** so they never need to specify it again.
+
+**IMPORTANT:** Never hardcode any user-specific path in this skill file. Always resolve paths dynamically via the procedure above.
+
+---
+
+## Optional Dependencies (Skills & Tools)
+
+llm-wiki can leverage other Claude Code skills for richer content ingestion. These are **optional** — the skill works without them, but will prompt the user when a dependency would help.
+
+| Dependency | What it does | When needed | How to check |
+|-----------|-------------|-------------|-------------|
+| `/bilibili-render-pdf` skill | Extracts Bilibili video content into structured notes + PDF | When a `bilibili.com` or `b23.tv` URL is provided | Check if skill exists: `ls ~/.claude/skills/bilibili-render-pdf/SKILL.md` |
+| `/youtube-render-pdf` skill | Extracts YouTube video content into structured notes + PDF | When a `youtube.com` or `youtu.be` URL is provided | Check if skill exists: `ls ~/.claude/skills/youtube-render-pdf/SKILL.md` |
+| `tavily` MCP server | Web page extraction and search | When processing web URLs (blogs, news, WeChat articles) | Check if tavily tools are available in the current session |
+| `github` MCP server | GitHub repo extraction | When processing GitHub repo URLs | Check if github MCP tools are available in the current session |
+| `pymupdf4llm` (Python) | Enhanced PDF to Markdown conversion | When processing PDF files | `python3 -c "import pymupdf4llm"` |
+| `MinerU` (Python) | Best-quality PDF conversion (LaTeX formulas, tables) | When processing academic PDFs | `python3 -c "import magic_pdf"` |
+
+### Dependency Resolution
+
+When a URL or file requires an unavailable dependency:
+
+1. **Inform the user** what's missing and why it's needed.
+2. **Offer to help install** if possible:
+   - For skills: "要我帮你安装 `/bilibili-render-pdf` skill 吗？"
+   - For Python packages: "要我运行 `pip install pymupdf4llm` 吗？"
+   - For MCP servers: "你需要在 Claude Code 设置中配置 tavily MCP server。"
+3. **Offer a fallback** if one exists (e.g., use `tavily_extract` instead of a missing skill).
+4. **Never silently skip** — always tell the user what happened and what they can do.
+
 ## Project Structure
 
 ```
@@ -78,14 +132,44 @@ https://youtube.com/watch?v=xxxxx
 
 | Domain | Primary Tool | Fallback |
 |--------|-------------|----------|
+| `bilibili.com` / `b23.tv` | `/bilibili-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
+| `youtube.com` / `youtu.be` | `/youtube-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
 | `x.com` / `twitter.com` | `web_reader` | Prompt user to copy content manually |
-| `youtube.com` | `web_reader` (extracts metadata: title, chapters, description) | Prompt user to paste transcript/summary |
 | `mp.weixin.qq.com` | `tavily_extract` | Prompt user to copy content manually |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
 | `zhihu.com` | — | Anti-scraping blocks extraction — prompt user to copy content manually |
 | `xiaohongshu.com` | — | Requires xiaohongshu-mcp (external) — prompt user to copy content manually |
 | `github.com` / `gitlab.com` | GitHub MCP (`get_file_contents` for tree + README + key files) | `git clone` + Bash + Read |
 | Other (blogs, docs, Medium) | `web_reader` | `tavily_extract` |
+
+### Video URL Processing
+
+When a Bilibili or YouTube URL is detected:
+
+1. **Check if the required skill is installed:**
+   ```bash
+   ls ~/.claude/skills/bilibili-render-pdf/SKILL.md 2>/dev/null  # for Bilibili
+   ls ~/.claude/skills/youtube-render-pdf/SKILL.md 2>/dev/null    # for YouTube
+   ```
+
+2. **If skill is available:**
+   a. Invoke the skill using the Skill tool (e.g., `Skill("bilibili-render-pdf", args: "<url>")`).
+   b. The skill generates structured notes (typically a `.md` or `.tex` file and a PDF).
+   c. Read the generated markdown/notes content.
+   d. Treat the content as the "document" and proceed with normal digest flow (create source summary).
+   e. Optionally move/copy the generated PDF to `raw/sources/` for archival.
+
+3. **If skill is NOT available:**
+   a. Inform the user:
+      > "处理 Bilibili/YouTube 视频需要安装对应的 skill。要我帮你安装吗？"
+      > - Bilibili: "安装命令：`git clone <repo-url> ~/.claude/skills/bilibili-render-pdf`"
+      > - YouTube: "安装命令：`git clone <repo-url> ~/.claude/skills/youtube-render-pdf`"
+   b. Offer fallback: try `tavily_extract` for basic page metadata (title, description).
+   c. If fallback also fails, prompt user to paste transcript or summary manually.
+
+4. **Source naming for videos:**
+   - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
+   - `youtube.com/watch?v=xxx` → `youtube-{title-slug}`
 
 ### PDF Processing
 
@@ -131,6 +215,8 @@ When a GitHub/GitLab URL is detected in inbox (or user provides a repo URL):
   - `x.com/karpathy/status/123` → `karpathy-tweet-123`
   - `mp.weixin.qq.com/s/xxx` → `{page-title-slug}`
   - `arxiv.org/abs/2401.00001` → `arxiv-2401-00001`
+  - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
+  - `youtube.com/watch?v=xxx` → `youtube-{title-slug}`
 
 ---
 
@@ -174,9 +260,18 @@ When a GitHub/GitLab URL is detected in inbox (or user provides a repo URL):
 
 7. Create empty `wiki/_index.md`, `wiki/_graph.md`, and `log.md`.
 
-8. Report success, show structure, tell user to drop materials (files or URL lists) into `raw/inbox/`.
+8. **Save to global config** — write `~/.claude/llm-wiki.json`:
+   ```json
+   {
+     "wiki_path": "/absolute/path/to/the/new/project"
+   }
+   ```
+   If the file already exists (user has another wiki), ask:
+   > "你已经有一个知识库配置在 {existing_path}。要替换为新的吗？还是保留旧的？"
 
-9. **Log:** append `[init] Project "{name}" created at {path}` to `log.md`.
+9. Report success, show structure, tell user to drop materials (files or URL lists) into `raw/inbox/`.
+
+10. **Log:** append `[init] Project "{name}" created at {path}` to `log.md`.
 
 ---
 
@@ -184,16 +279,21 @@ When a GitHub/GitLab URL is detected in inbox (or user provides a repo URL):
 
 **Usage:** `llm-wiki digest` or "帮我消化 inbox 里的新资料"
 
+Also supports **direct URL input**: user can say "帮我把这个链接存到知识库 https://..." or paste a URL directly without dropping it into inbox first. In this case, treat the URL as if it were in a URL list file and process it immediately.
+
 Digest only **processes and records** new documents. It does NOT rebuild the wiki — that's `compile`.
 
 **Steps:**
 
-1. Read `.kf.md` to get project state.
-2. Scan `raw/inbox/` for all readable files (.md, .txt, .pdf, .py, .ipynb, etc.).
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init). All subsequent paths are relative to the wiki root.
+2. Read `.kf.md` to get project state.
+3. Scan `raw/inbox/` for all readable files (.md, .txt, .pdf, .py, .ipynb, etc.).
 3. If inbox is empty, inform user and stop.
 
-4. **Classify each inbox file:**
+4. **Classify each inbox file (or direct URL input):**
    - **URL list file**: a file where most non-empty lines are URLs (start with `http://` or `https://`). Each URL becomes a separate source.
+   - **Direct URL**: user provided a URL in the conversation (not in a file). Treat as a single-URL list.
+   - **Video URL** (Bilibili or YouTube): routed to skill-based processing (see [Video URL Processing](#video-url-processing)).
    - **PDF file** (`.pdf`): processed with PDF tiered strategy (see [PDF Processing](#pdf-processing)).
    - **Regular file**: any other file (.md, .txt, .py, .ipynb, etc.). Treated as a single document source.
 
@@ -264,22 +364,34 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
    e. Convert the extracted text to a source summary with `> Source: raw/sources/{filename}`.
    f. **Move** the PDF to `raw/sources/`.
 
-9. **For each GitHub/GitLab repo URL** (from URL list files):
+9. **For each video URL** (Bilibili or YouTube):
+
+   a. **Detect**: URL matches `bilibili.com`, `b23.tv`, `youtube.com`, or `youtu.be`.
+   b. **Check skill availability**:
+      ```bash
+      ls ~/.claude/skills/bilibili-render-pdf/SKILL.md 2>/dev/null  # Bilibili
+      ls ~/.claude/skills/youtube-render-pdf/SKILL.md 2>/dev/null    # YouTube
+      ```
+   c. **If skill is available**: invoke via the Skill tool. Read the generated notes/markdown output. Treat the content as a regular document for source summary creation.
+   d. **If skill is NOT available**: inform the user what's missing, offer to help install, and offer fallback (tavily_extract for page metadata, or manual paste).
+   e. Create source summary with `> Source: {video-url}` and `> Type: video`.
+
+10. **For each GitHub/GitLab repo URL** (from URL list files):
 
    a. **Extract via GitHub MCP** (GitHub repos): get tree, README, config files, key source files.
    b. For local paths or GitLab: `git clone` then `tree -L 3` + Glob + Read.
    c. **Generate** `repo-{name}-overview.md` and `repo-{name}-code.md` in `raw/inbox/`.
    d. These generated files will be picked up as regular markdown files in the next digest cycle.
 
-10. After processing all items, **report summary:**
-    - "Digested N files, M URLs, P PDFs, R repos. (K items failed — see details above)"
+11. After processing all items, **report summary:**
+    - "Digested N files, M URLs, P PDFs, V videos, R repos. (K items failed — see details above)"
     - List any failures with the suggested action.
 
-11. Update `.kf.md` with new source count and last-digested date.
+12. Update `.kf.md` with new source count and last-digested date.
 
-12. **Log:** append to `log.md`:
+13. **Log:** append to `log.md`:
     ```
-    [{date}] digest: processed {n_files} files, {n_urls} URLs, {n_pdfs} PDFs, {n_repos} repos ({n_failed} failed)
+    [{date}] digest: processed {n_files} files, {n_urls} URLs, {n_pdfs} PDFs, {n_videos} videos, {n_repos} repos ({n_failed} failed)
     - Sources: {list of source slugs}
     - Failed: {list of failed items, if any}
     ```
@@ -297,7 +409,8 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 **Steps:**
 
-1. Read `wiki/_index.md` to understand current state.
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+2. Read `wiki/_index.md` to understand current state.
 2. Scan `wiki/sources/` for all source summaries.
 3. Extract all referenced concepts and entities across all sources.
 4. For each **concept** (ideas, methods, patterns, techniques):
@@ -376,8 +489,9 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 **Steps:**
 
-1. Read `wiki/_index.md` for scope.
-2. Search for relevant articles:
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+2. Read `wiki/_index.md` for scope.
+3. Search for relevant articles:
    ```bash
    python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "question" --top-k 10
    ```
@@ -403,6 +517,8 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 **Usage:** `llm-wiki check` or "检查一下知识库"
 
+**First:** Locate wiki using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+
 **Checks:**
 - **Broken links:** `[[...]]` pointing to non-existent articles.
 - **Orphans:** articles with no links in or out.
@@ -425,6 +541,8 @@ Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 
 **Usage:** `llm-wiki export "topic" [format]` or "生成一份报告"
 
+**First:** Locate wiki using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+
 **Formats:**
 - `report` (default): markdown report in `output/reports/`
 - `slides`: Marp-format slides in `output/slides/`
@@ -446,6 +564,8 @@ Ask user: "Auto-fix what I can? (broken links, missing backlinks, orphans)"
 ### 7. `trust` — Approve Content
 
 **Usage:** `llm-wiki trust` or "把确认过的内容导出来"
+
+**First:** Locate wiki using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
 
 The wiki is AI-generated draft territory. `trust` lets you review and export
 specific articles to `trusted/` — your trusted, human-approved knowledge.
@@ -484,7 +604,8 @@ Display a quick overview of the knowledge base.
 
 **Steps:**
 
-1. Read `.kf.md`, `wiki/_index.md`, and `log.md`.
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+2. Read `.kf.md`, `wiki/_index.md`, and `log.md`.
 2. Display:
 
 ```
