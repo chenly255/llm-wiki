@@ -5,7 +5,7 @@ description: >
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status.
+  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status, save.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
@@ -33,7 +33,7 @@ llm-wiki uses a global config file to remember the user's knowledge base path ac
 
 ### Locate Wiki Procedure (MUST follow for ALL subcommands except `init`)
 
-Every subcommand (digest, compile, query, check, export, trust, status) MUST locate the wiki before doing anything. Follow this order:
+Every subcommand (digest, compile, query, check, export, trust, status, save) MUST locate the wiki before doing anything. Follow this order:
 
 1. **Check global config**: read `~/.claude/llm-wiki.json`. If it exists and `wiki_path` points to a directory with a valid `.kf.md`, use it.
 2. **Check current directory**: if no global config, look for `.kf.md` in the current working directory.
@@ -630,6 +630,85 @@ Display a quick overview of the knowledge base.
 ```
 
 3. If inbox has items, remind: "Inbox 中有 {n} 个未处理的文件，运行 `digest` 处理。"
+
+---
+
+### 9. `save` — Save Conversation Insights Directly
+
+**Usage:** `llm-wiki save` or "把刚才了解的存到知识库" or "存到wiki"
+
+**Trigger:** User wants to save knowledge gained during the current conversation (e.g., from exploring a local codebase, debugging a tool, reading documentation, or discussing a topic) directly to the wiki — without going through the inbox → digest pipeline.
+
+**This is the key difference from `digest`:** `digest` processes files/URLs from inbox. `save` captures insights that exist only in the conversation context (explored code, discussed concepts, learned facts).
+
+**Steps:**
+
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+
+2. **Identify what to save.** Based on the conversation, determine:
+   - What **entities** were discussed? (tools, repos, people, organizations, datasets)
+   - What **concepts** emerged? (methods, patterns, techniques, ideas)
+   - What is the **source**? (local repo path, conversation topic, documentation URL)
+
+3. **Check for duplicates:** search existing wiki articles before creating new ones.
+   ```bash
+   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "{topic}" --top-k 5
+   ```
+   If a matching article exists, **update** it instead of creating a new one.
+
+4. **Create source summary** at `wiki/sources/{slug}.md`:
+   ```markdown
+   # {Title}
+   > Source: {local path / URL / "conversation context"}
+   > Digested: {date}
+   > Type: {code|discussion|documentation|other}
+   > Status: digested
+
+   ## Summary
+   {3-5 sentence summary of what was learned}
+
+   ## Key Concepts
+   - [[{concept}]]: {relevance}
+
+   ## Key Entities
+   - [[{entity}]]: {relevance}
+
+   ## Key Facts
+   - {fact 1}
+   - {fact 2}
+   ```
+
+5. **Create or update entity/concept articles** following the standard wiki format (see `compile` for templates).
+
+6. **Rebuild index:**
+   ```bash
+   python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
+   ```
+
+7. **Update `.kf.md`** with new article count and last-digested date.
+
+8. **Log:** append to `log.md`:
+   ```
+   [{date}] save: {n_entities} entities, {n_concepts} concepts from conversation
+   - New: {list of new article slugs}
+   - Updated: {list of updated article slugs}
+   - Topic: {brief description of what was saved}
+   ```
+
+9. **Report** to user: what was saved, with links to the articles.
+
+**Common scenarios:**
+- "我刚看了一个本地代码库，存到知识库" → create entity (tool type) + source summary
+- "把刚才讨论的调试经验存下来" → create concept or update existing + source summary
+- "这个工具的用法记到wiki里" → create/update entity + source summary
+- "把这个项目的架构理解存一下" → create entity + related concepts + source summary
+
+**Rules:**
+- Save captures **your understanding**, not raw data. Summarize and structure.
+- Always create a source summary to track provenance.
+- Cross-reference existing wiki articles with `[[wiki-link]]`.
+- For local repos: record the local path in `> Source:` field for future reference.
+- If the conversation contains both entity and concept knowledge, create both.
 
 ---
 
