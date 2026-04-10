@@ -5,7 +5,7 @@ description: >
   TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status, save.
+  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
@@ -33,7 +33,7 @@ llm-wiki uses a global config file to remember the user's knowledge base path ac
 
 ### Locate Wiki Procedure (MUST follow for ALL subcommands except `init`)
 
-Every subcommand (digest, compile, query, check, export, trust, status, save) MUST locate the wiki before doing anything. Follow this order:
+Every subcommand (digest, compile, query, check, export, trust, status, save, read-paper) MUST locate the wiki before doing anything. Follow this order:
 
 1. **Check global config**: read `~/.claude/llm-wiki.json`. If it exists and `wiki_path` points to a directory with a valid `.kf.md`, use it.
 2. **Check current directory**: if no global config, look for `.kf.md` in the current working directory.
@@ -57,7 +57,7 @@ llm-wiki can leverage other Claude Code skills for richer content ingestion. The
 | `tavily` MCP server | Web page extraction and search | When processing web URLs (blogs, news, WeChat articles) | Check if tavily tools are available in the current session |
 | `github` MCP server | GitHub repo extraction | When processing GitHub repo URLs | Check if github MCP tools are available in the current session |
 | `pymupdf4llm` (Python) | Enhanced PDF to Markdown conversion | When processing PDF files | `python3 -c "import pymupdf4llm"` |
-| `MinerU` (Python) | Best-quality PDF conversion (LaTeX formulas, tables) | When processing academic PDFs | `python3 -c "import magic_pdf"` |
+| `MinerU` (conda env: mineru) | Best-quality PDF→MD conversion (LaTeX formulas, tables, figures) | `read-paper` and academic PDF processing | `conda run -n mineru mineru --version` |
 
 ### Dependency Resolution
 
@@ -84,6 +84,15 @@ When a URL or file requires an unavailable dependency:
 │   ├── concepts/           # Concept articles (ideas, methods, patterns)
 │   ├── entities/           # Entity articles (people, tools, orgs, datasets)
 │   └── sources/            # Source summaries (1 per digested document)
+├── papers/                 # Structured literature library (via read-paper)
+│   ├── _papers_index.md    # Master paper index (title, authors, year, tags)
+│   └── {paper-slug}/       # One folder per paper (GXL Sy-inspired)
+│       ├── meta.json       # Structured metadata
+│       ├── paper.pdf       # Original PDF (renamed to title)
+│       ├── full.md         # Complete markdown (from MinerU)
+│       ├── sections/       # Split by section headings
+│       ├── figures/        # Extracted images
+│       └── README.md       # Quick navigation index
 ├── output/                 # Generated deliverables
 │   ├── reports/
 │   ├── slides/
@@ -709,6 +718,164 @@ Display a quick overview of the knowledge base.
 - Cross-reference existing wiki articles with `[[wiki-link]]`.
 - For local repos: record the local path in `> Source:` field for future reference.
 - If the conversation contains both entity and concept knowledge, create both.
+
+---
+
+### 10. `read-paper` — Import and Structure a Scientific Paper
+
+**Usage:** `llm-wiki read-paper <pdf-path>` or "帮我读这篇论文并存到知识库" or "把这个 PDF 存到文献库"
+
+**Trigger:** User provides a PDF path (or URL to a paper) and wants it ingested into the knowledge base as a structured, navigable literature entry.
+
+**Design principle (inspired by [GXL Sy](https://gxl.ai/blog/biomedical-literature-as-a-filesystem)):** Scientific papers are born as structured artifacts (sections, figures, tables, supplements). PDF flattens them. `read-paper` reverses this compression — each paper becomes a folder that AI agents can navigate like a code repository.
+
+**Steps:**
+
+1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
+
+2. **Ensure `papers/` directory exists** in the wiki root:
+   ```bash
+   mkdir -p {wiki_root}/papers
+   ```
+
+3. **Convert PDF to Markdown + extract images** using MinerU:
+   ```bash
+   conda run -n mineru mineru -p "{pdf_path}" -o /tmp/mineru_output
+   ```
+   MinerU outputs:
+   - `{name}.md` — full markdown with LaTeX formulas and table preservation
+   - `images/` — extracted figures as PNG/JPG
+
+   **Fallback chain** (if MinerU fails or is unavailable):
+   - Try `pymupdf4llm` (if installed): `python3 -c "import pymupdf4llm; print(pymupdf4llm.to_markdown('{pdf_path}'))"`
+   - Try `pypdf` (basic text only): `python3 -c "from pypdf import PdfReader; ..."`
+   - If all fail: inform user and suggest installing MinerU (`conda run -n mineru pip install mineru`)
+
+4. **Extract metadata** from the markdown content using LLM analysis:
+   ```json
+   {
+     "title": "Full paper title",
+     "authors": ["Author 1", "Author 2"],
+     "year": "2026",
+     "doi": "10.xxxx/...",
+     "journal": "bioRxiv / Nature Methods / ...",
+     "keywords": ["keyword1", "keyword2"],
+     "abstract": "Full abstract text"
+   }
+   ```
+
+5. **Generate paper slug** from title:
+   - Lowercase, kebab-case, max 60 chars
+   - Example: "Formalized scientific methodology enables rigorous AI-conducted research" → `formalized-scientific-methodology-ai-research`
+
+6. **Create paper folder structure** at `{wiki_root}/papers/{slug}/`:
+   ```
+   📂 {slug}/
+   ├── meta.json              # Structured metadata (step 4)
+   ├── paper.pdf              # Original PDF (copied and renamed)
+   ├── full.md                # Complete markdown from MinerU
+   ├── sections/              # Split by section headings
+   │   ├── abstract.md
+   │   ├── introduction.md
+   │   ├── related-work.md    # (if exists)
+   │   ├── methods.md
+   │   ├── results.md
+   │   ├── discussion.md
+   │   ├── conclusion.md      # (if exists)
+   │   └── references.md
+   ├── figures/                # Extracted images from MinerU
+   │   ├── fig1.png
+   │   ├── fig2.png
+   │   └── ...
+   └── README.md              # Quick navigation index
+   ```
+
+7. **Split markdown into sections** using the helper script:
+   ```bash
+   python3 ~/.claude/skills/llm-wiki/scripts/split_paper.py \
+     --input /tmp/mineru_output/{name}.md \
+     --output {wiki_root}/papers/{slug}/sections/
+   ```
+   The script splits on `## ` or `# ` headings, normalizes section filenames to kebab-case, and creates a `README.md` with a table of contents.
+
+   **If the script is unavailable or fails**, do the split manually:
+   - Read the full markdown
+   - Identify major section headings (Abstract, Introduction, Methods/Materials, Results, Discussion, Conclusion, References)
+   - Write each section to its own `.md` file in `sections/`
+
+8. **Copy figures**: move extracted images from MinerU output to `{slug}/figures/`.
+
+9. **Copy and rename PDF**: copy the original PDF to `{slug}/paper.pdf`.
+
+10. **Generate README.md** for the paper folder:
+    ```markdown
+    # {Paper Title}
+    > Authors: {Author 1}, {Author 2}, ...
+    > Year: {year} | Journal: {journal}
+    > DOI: {doi}
+
+    ## Quick Navigation
+    - [Abstract](sections/abstract.md)
+    - [Introduction](sections/introduction.md)
+    - [Methods](sections/methods.md)
+    - [Results](sections/results.md)
+    - [Discussion](sections/discussion.md)
+    - [References](sections/references.md)
+    - [Full Text](full.md)
+    - [Original PDF](paper.pdf)
+
+    ## Figures
+    - ![Fig 1](figures/fig1.png)
+    - ...
+
+    ## Keywords
+    {keyword1}, {keyword2}, ...
+    ```
+
+11. **Update papers index** — create or update `{wiki_root}/papers/_papers_index.md`:
+    ```markdown
+    # Papers Index
+    > Auto-maintained by llm-wiki read-paper.
+
+    | Title | Authors | Year | Journal | Tags | Folder |
+    |-------|---------|------|---------|------|--------|
+    | {title} | {first author} et al. | {year} | {journal} | {keywords} | [{slug}]({slug}/) |
+    ```
+
+12. **Auto-digest to wiki** — automatically create a source summary in `wiki/sources/`:
+    - Read the paper's abstract, key findings, and methods
+    - Create `wiki/sources/paper-{slug}.md` following the standard source summary template
+    - Extract key concepts and entities
+    - Create or update relevant concept/entity articles in `wiki/concepts/` and `wiki/entities/`
+    - Rebuild wiki index:
+      ```bash
+      python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
+      ```
+
+13. **Log:** append to `log.md`:
+    ```
+    [{date}] read-paper: "{title}" → papers/{slug}/
+    - Sections: {n} | Figures: {n} | Pages: {n}
+    - Auto-digested: source summary + {n_concepts} concepts + {n_entities} entities
+    ```
+
+14. **Report** to user:
+    > 论文已入库：`papers/{slug}/`
+    > - {n} 个章节、{n} 张图片
+    > - 已自动生成 wiki source summary 和相关知识条目
+    > - 可以用 `cat papers/{slug}/sections/methods.md` 精确阅读某个章节
+
+**Batch mode:** If user provides a directory of PDFs, process each one sequentially. Report progress every 3 papers.
+
+**URL support:** If user provides an arXiv URL (e.g., `https://arxiv.org/abs/2401.00001`):
+1. Download PDF: `wget https://arxiv.org/pdf/2401.00001 -O /tmp/paper.pdf`
+2. Proceed with normal read-paper flow.
+
+**Rules:**
+- Never modify or delete the original PDF — always copy.
+- Section splitting is best-effort; some papers have non-standard structures. If headings are ambiguous, keep the full.md as the authoritative source.
+- Figures extracted by MinerU may not perfectly correspond to paper figures. Include all extracted images.
+- The `papers/` directory is separate from `wiki/` — papers are structured literature storage, wiki is synthesized knowledge. They are linked through source summaries.
 
 ---
 
