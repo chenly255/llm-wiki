@@ -1,11 +1,15 @@
 ---
 name: llm-wiki
 description: >
-  Build and maintain LLM-powered personal knowledge bases (inspired by Karpathy + kepano).
-  TRIGGER when: user mentions knowledge base, wiki compilation, knowledge management with LLM,
-  "build a wiki", "organize my notes/papers/articles", "llm wiki", or uses
+  Build and maintain LLM-powered personal/local knowledge bases (inspired by Karpathy + kepano).
+  这是"个人知识库"，本地文件系统上的 wiki，与团队共享云端知识库（kb-search）完全不同。
+  TRIGGER when: user mentions personal knowledge base, wiki compilation, knowledge management with LLM,
+  "build a wiki", "organize my notes/papers/articles", "llm wiki", "个人知识库", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
   "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
+  DO NOT trigger when: 用户说"搜共享知识库"、"搜论文"、"搜文献"、"kb search"——这些属于 kb-search skill。
+  区分规则：涉及"整理/构建/管理个人知识"→ 用 llm-wiki；
+  涉及"搜索/检索团队共享文献或资料"→ 用 kb-search。
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
@@ -469,12 +473,27 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
    ```
 
 6. **Rebuild index** (`wiki/_index.md`): list all articles with 1-line summaries.
+   Summaries in `_index.md` MUST be under 80 characters. If the extracted summary exceeds 80 chars, truncate with `...`.
 7. **Rebuild backlink graph** (`wiki/_graph.md`): run the index script to update tables + Mermaid graph.
    ```bash
    python3 ~/.claude/skills/llm-wiki/scripts/index.py --wiki-dir wiki/
    ```
 8. Update `.kf.md` stats and last-compiled date.
 9. Report: how many concepts, entities, and source summaries now exist.
+
+10. **Auto-check (lightweight):** After compile, scan for broken `[[wikilinks]]`. For any unresolved link referenced by **3 or more** articles, auto-create a stub at the appropriate location (`wiki/concepts/` or `wiki/entities/`):
+   ```markdown
+   # {Link Name}
+   > Auto-compiled by llm-wiki.
+   > Status: stub (pending content)
+
+   ## Overview
+   (Referenced by {N} articles but not yet documented. Run `compile` after adding source material.)
+
+   ## Referenced By
+   - {list of referencing articles}
+   ```
+   Report: "Auto-created {N} stub articles for frequently-referenced missing links."
 
 **Rules:**
 - When updating existing articles, **merge** new info — don't overwrite.
@@ -705,6 +724,7 @@ Display a quick overview of the knowledge base.
    ```
 
 9. **Report** to user: what was saved, with links to the articles.
+10. **Auto-check (lightweight):** Same as compile — scan for newly-introduced broken links and auto-create stubs for those referenced 3+ times.
 
 **Common scenarios:**
 - "我刚看了一个本地代码库，存到知识库" → create entity (tool type) + source summary
@@ -718,6 +738,9 @@ Display a quick overview of the knowledge base.
 - Cross-reference existing wiki articles with `[[wiki-link]]`.
 - For local repos: record the local path in `> Source:` field for future reference.
 - If the conversation contains both entity and concept knowledge, create both.
+- When saving from code exploration: record the specific repo path (e.g., `> Source: /path/to/repo`) not just "conversation context".
+- When saving from paper/article discussion: record the URL or DOI.
+- `> Source: conversation context` should be the LAST resort, only when no specific source is identifiable.
 
 ---
 

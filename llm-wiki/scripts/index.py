@@ -46,8 +46,8 @@ def extract_summary(content: str) -> str:
             continue
         # Found first content line
         summary = stripped
-        if len(summary) > 150:
-            summary = summary[:147] + '...'
+        if len(summary) > 80:
+            summary = summary[:77] + '...'
         return summary
     return "(no summary)"
 
