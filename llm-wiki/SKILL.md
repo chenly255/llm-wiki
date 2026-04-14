@@ -673,16 +673,32 @@ Display a quick overview of the knowledge base.
 
 1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
 
-2. **Identify what to save.** Based on the conversation, determine:
-   - What **entities** were discussed? (tools, repos, people, organizations, datasets)
-   - What **concepts** emerged? (methods, patterns, techniques, ideas)
-   - What is the **source**? (local repo path, conversation topic, documentation URL)
+2. **Full conversation harvest — scan everything, not just the main topic.**
 
-3. **Check for duplicates:** search existing wiki articles before creating new ones.
+   Go through the ENTIRE conversation and collect ALL of the following:
+
+   a. **Direct discussion**: entities and concepts explicitly discussed or designed.
+
+   b. **Research artifacts** (MANDATORY — most commonly missed):
+      - Every tool/project/paper/dataset **named in web search results**
+      - Every entity **mentioned in WebFetch / tavily / Semantic Scholar outputs**
+      - Every concept **explained or compared** during research
+
+   c. **Incidentally mentioned**: tools referenced in passing, papers cited as background, APIs discussed as alternatives.
+
+   Build a flat list: `[entity/concept name → new info learned → exists in wiki?]`
+
+   **Zero-leakage rule**: if something was named in ANY tool output during this session, it belongs on this list. Omitting it is a failure.
+
+3. **For each item on the harvest list:**
    ```bash
-   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "{topic}" --top-k 5
+   python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "{name}" --top-k 3
    ```
-   If a matching article exists, **update** it instead of creating a new one.
+   - **Exists + has new info** → **update** the article with what was learned this session
+   - **Exists + nothing new** → skip
+   - **Does not exist** → **create** new entity/concept article
+
+   Do NOT only create new articles. Updating existing ones with fresh research details is equally important.
 
 4. **Create source summary** at `wiki/sources/{slug}.md`:
    ```markdown
@@ -733,6 +749,8 @@ Display a quick overview of the knowledge base.
 - "把这个项目的架构理解存一下" → create entity + related concepts + source summary
 
 **Rules:**
+- **Zero leakage**: every entity/concept named in any tool output (web search, fetch, Semantic Scholar, code read) during the session must be checked against the wiki. Not just the main topic.
+- **Update = as important as create**: finding new details about an existing article and NOT updating it is a failure equivalent to missing a new entity.
 - Save captures **your understanding**, not raw data. Summarize and structure.
 - Always create a source summary to track provenance.
 - Cross-reference existing wiki articles with `[[wiki-link]]`.
