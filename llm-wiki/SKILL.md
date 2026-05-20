@@ -63,6 +63,44 @@ llm-wiki can leverage other Claude Code skills for richer content ingestion. The
 | `pymupdf4llm` (Python) | Enhanced PDF to Markdown conversion | When processing PDF files | `python3 -c "import pymupdf4llm"` |
 | `MinerU` (conda env: mineru) | Best-quality PDF→MD conversion (LaTeX formulas, tables, figures) | `read-paper` and academic PDF processing | `conda run -n mineru mineru --version` |
 
+#### MinerU Runtime Configuration (IMPORTANT)
+
+MinerU 3.0+ requires specific environment variables to work correctly:
+
+```bash
+# Step 1: 先选一张空闲 GPU（不要硬编码 GPU 0 — 它经常被别人占满！）
+GPU_ID=$(nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits \
+  | awk -F', ' '$2<10 {print $1; exit}')
+echo "Using GPU $GPU_ID"
+
+# Step 2: 跑 mineru
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u ALL_PROXY \
+  MINERU_MODEL_SOURCE=local \
+  CUDA_VISIBLE_DEVICES=$GPU_ID \
+  conda run -n mineru \
+  mineru -p "{pdf_path}" -o "{output_path}"
+```
+
+Key points:
+- **MUST disable proxy** (`env -u http_proxy ...`) — MinerU tries to phone home otherwise.
+- **MUST set `MINERU_MODEL_SOURCE=local`** — models are pre-downloaded at `/data3/liying/mineru_models/`.
+- **MUST pick a free GPU dynamically** — do NOT hardcode `CUDA_VISIBLE_DEVICES=0`.
+  GPU 0 on this machine is frequently 100% busy (e.g., by sc-bias). If mineru grabs a
+  busy card it competes for compute and gets several times slower (looks like it's not
+  using GPU at all). Always run `nvidia-smi` first and pick a card with <10% util.
+- **Default backend is `hybrid-auto-engine`** (no `-b` needed) — highest accuracy (90+), uses VLM + pipeline combined. ~1.5–2 min for a 16-page paper on an idle A800; ~6 min for 32 pages.
+- Add `-b pipeline` for faster processing (~1 min) at slightly lower accuracy (86+) if speed matters more.
+- Config file: `~/mineru.json` (auto-generated, points to local models).
+- Models location: `/data3/liying/mineru_models/modelscope_cache/models/OpenDataLab/`.
+
+**Output directory layout differs by backend:**
+- Default `hybrid-auto-engine`: `{output}/{name}/hybrid_auto/{name}.md` + `hybrid_auto/images/`
+- `-b pipeline`: `{output}/{name}/auto/{name}.md` + `auto/images/`
+
+The `read-paper` step below that says "outputs in `auto/`" only applies to the pipeline
+backend. For default hybrid backend, replace `auto/` with `hybrid_auto/` when picking up
+the markdown and images.
+
 ### Dependency Resolution
 
 When a URL or file requires an unavailable dependency:
@@ -188,12 +226,12 @@ When a Bilibili or YouTube URL is detected:
 
 PDF files in `raw/inbox/` are processed with a tiered strategy:
 
-1. **Default (zero config)**: Use the Read tool to extract PDF text content. Works for born-digital PDFs with text layers.
-2. **Enhanced (pymupdf4llm)**: If `pymupdf4llm` is installed (`pip install pymupdf4llm`), use it for better Markdown output with structure preservation. Lightweight, no GPU required.
-3. **Best quality (MinerU)**: If MinerU is installed (`pip install magic-pdf[full]`), use it for academic papers with formulas, tables, and figures. Converts formulas to LaTeX. GPU recommended but not required.
+1. **Best quality (MinerU — preferred)**: Use MinerU with pipeline backend for academic papers. GPU-accelerated, best LaTeX formula and table support. See [MinerU Runtime Configuration](#mineru-runtime-configuration-important) for the correct command.
+2. **Enhanced (pymupdf4llm)**: If MinerU is unavailable, use `pymupdf4llm` for decent Markdown output. Lightweight, CPU-only.
+3. **Default (zero config)**: Use the Read tool to extract PDF text content. Works for born-digital PDFs with text layers.
 4. **Manual fallback**: If all automated methods fail or produce poor results, prompt the user to provide the paper's arXiv page or manually paste key sections.
 
-Detection order: try pymupdf4llm → try MinerU → fall back to Read tool.
+Detection order: try MinerU (best) → try pymupdf4llm → fall back to Read tool.
 
 ### Code Repository Processing
 
@@ -370,8 +408,8 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
 
 8. **For each PDF file** in inbox:
 
-   a. **Try pymupdf4llm** (if installed): run `pymupdf4llm.to_markdown("path/to/file.pdf")` to convert.
-   b. If pymupdf4llm not available, **try MinerU** (if installed): run `magic-pdf` to convert.
+   a. **Try MinerU** (preferred): run with pipeline backend and GPU. See [MinerU Runtime Configuration](#mineru-runtime-configuration-important) for the exact command. Output is in `{output}/auto/{name}.md` with `images/` directory.
+   b. If MinerU not available, **try pymupdf4llm** (if installed): `pymupdf4llm.to_markdown("path/to/file.pdf")`.
    c. If neither is installed, **use the Read tool** to extract text (works for born-digital PDFs).
    d. If all methods fail or produce poor results (<200 chars), prompt the user to provide an alternative (arXiv URL, manual paste).
    e. Convert the extracted text to a source summary with `> Source: raw/sources/{filename}`.
@@ -781,14 +819,18 @@ Display a quick overview of the knowledge base.
 
 3. **Convert PDF to Markdown + extract images** using MinerU:
    ```bash
-   conda run -n mineru mineru -p "{pdf_path}" -o /tmp/mineru_output
+   env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u ALL_PROXY \
+     MINERU_MODEL_SOURCE=local \
+     CUDA_VISIBLE_DEVICES=0 \
+     conda run -n mineru \
+     mineru -p "{pdf_path}" -o /tmp/mineru_output
    ```
-   MinerU outputs:
+   MinerU outputs (under `auto/` subdirectory):
    - `{name}.md` — full markdown with LaTeX formulas and table preservation
    - `images/` — extracted figures as PNG/JPG
 
    **Fallback chain** (if MinerU fails or is unavailable):
-   - Try `pymupdf4llm` (if installed): `python3 -c "import pymupdf4llm; print(pymupdf4llm.to_markdown('{pdf_path}'))"`
+   - Try `pymupdf4llm` (if installed): `python3 -c "import pymupdf4llm; md = pymupdf4llm.to_markdown('{pdf_path}'); ..."`
    - Try `pypdf` (basic text only): `python3 -c "from pypdf import PdfReader; ..."`
    - If all fail: inform user and suggest installing MinerU (`conda run -n mineru pip install mineru`)
 
