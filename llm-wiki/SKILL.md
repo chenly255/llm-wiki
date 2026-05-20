@@ -73,12 +73,12 @@ GPU_ID=$(nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,noun
   | awk -F', ' '$2<10 {print $1; exit}')
 echo "Using GPU $GPU_ID"
 
-# Step 2: 跑 mineru
+# Step 2: 跑 mineru — 默认用 pipeline 后端（快 7×，原生 PDF 质量没差别）
 env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u ALL_PROXY \
   MINERU_MODEL_SOURCE=local \
   CUDA_VISIBLE_DEVICES=$GPU_ID \
   conda run -n mineru \
-  mineru -p "{pdf_path}" -o "{output_path}"
+  mineru -p "{pdf_path}" -o "{output_path}" -b pipeline
 ```
 
 Key points:
@@ -88,18 +88,26 @@ Key points:
   GPU 0 on this machine is frequently 100% busy (e.g., by sc-bias). If mineru grabs a
   busy card it competes for compute and gets several times slower (looks like it's not
   using GPU at all). Always run `nvidia-smi` first and pick a card with <10% util.
-- **Default backend is `hybrid-auto-engine`** (no `-b` needed) — highest accuracy (90+), uses VLM + pipeline combined. ~1.5–2 min for a 16-page paper on an idle A800; ~6 min for 32 pages.
-- Add `-b pipeline` for faster processing (~1 min) at slightly lower accuracy (86+) if speed matters more.
+- **Default backend is now `pipeline`** (use `-b pipeline`). For a 16-page native PDF on an
+  idle A800 it finishes in ~60–70 seconds. Pipeline uses 6 small models (Layout, OCR, MFR
+  formula recognition, OriCls orientation, TabCls + TabRec table recognition) totalling 2.4 GB,
+  all GPU-accelerated.
+- **Why default switched away from hybrid-auto-engine**: hybrid runs pipeline + a 2.2 GB
+  VLM (MinerU2.5-2509) per page and merges. On the STAligner Nature paper benchmark
+  (16 pages, original PDF), pipeline produced **identical formula count (18 vs 18)** and
+  ~93 % same markdown size as hybrid, but in 65 s vs ~480 s. The VLM only helps on
+  scanned PDFs, handwriting, badly OCR'd legacy papers, or very complex multi-page tables.
+- **When to fall back to hybrid** (add `-b hybrid` instead, or drop `-b` entirely): scanned
+  PDFs / image-only PDFs / handwritten content / user explicitly asks for highest accuracy.
 - Config file: `~/mineru.json` (auto-generated, points to local models).
 - Models location: `/data3/liying/mineru_models/modelscope_cache/models/OpenDataLab/`.
 
 **Output directory layout differs by backend:**
-- Default `hybrid-auto-engine`: `{output}/{name}/hybrid_auto/{name}.md` + `hybrid_auto/images/`
-- `-b pipeline`: `{output}/{name}/auto/{name}.md` + `auto/images/`
+- `-b pipeline` (default): `{output}/{name}/auto/{name}.md` + `auto/images/`
+- `-b hybrid` (fallback for scanned PDFs): `{output}/{name}/hybrid_auto/{name}.md` + `hybrid_auto/images/`
 
-The `read-paper` step below that says "outputs in `auto/`" only applies to the pipeline
-backend. For default hybrid backend, replace `auto/` with `hybrid_auto/` when picking up
-the markdown and images.
+The `read-paper` step below picks files from `auto/` by default. If you fall back to
+hybrid for a scanned PDF, change the source path to `hybrid_auto/` accordingly.
 
 ### Dependency Resolution
 
@@ -817,17 +825,23 @@ Display a quick overview of the knowledge base.
    mkdir -p {wiki_root}/papers
    ```
 
-3. **Convert PDF to Markdown + extract images** using MinerU:
+3. **Convert PDF to Markdown + extract images** using MinerU (see [MinerU Runtime Configuration](#mineru-runtime-configuration-important) for the full rationale; the command below is the short form):
    ```bash
+   GPU_ID=$(nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits \
+     | awk -F', ' '$2<10 {print $1; exit}')
    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u all_proxy -u ALL_PROXY \
      MINERU_MODEL_SOURCE=local \
-     CUDA_VISIBLE_DEVICES=0 \
+     CUDA_VISIBLE_DEVICES=$GPU_ID \
      conda run -n mineru \
-     mineru -p "{pdf_path}" -o /tmp/mineru_output
+     mineru -p "{pdf_path}" -o /tmp/mineru_output -b pipeline
    ```
-   MinerU outputs (under `auto/` subdirectory):
+   MinerU pipeline backend outputs (under `auto/` subdirectory):
    - `{name}.md` — full markdown with LaTeX formulas and table preservation
    - `images/` — extracted figures as PNG/JPG
+
+   For scanned PDFs / handwritten content / explicit "highest accuracy" requests, drop
+   `-b pipeline` to use the default hybrid backend — it adds a 2.2 GB VLM pass per page
+   (~7× slower) and outputs to `hybrid_auto/` instead of `auto/`.
 
    **Fallback chain** (if MinerU fails or is unavailable):
    - Try `pymupdf4llm` (if installed): `python3 -c "import pymupdf4llm; md = pymupdf4llm.to_markdown('{pdf_path}'); ..."`
