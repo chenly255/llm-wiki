@@ -6,7 +6,9 @@ description: >
   TRIGGER when: user mentions personal knowledge base, wiki compilation, knowledge management with LLM,
   "build a wiki", "organize my notes/papers/articles", "llm wiki", "个人知识库", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
-  "知识工厂", "帮我整理这些资料". Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
+  "知识工厂", "帮我整理这些资料". Also trigger when the user pastes a content URL (微信公众号
+  mp.weixin.qq.com link, blog, paper, video) and wants it saved/ingested ("存到知识库",
+  "把这个链接存下来", "存这篇公众号"). Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
   DO NOT trigger when: 用户说"搜共享知识库"、"搜论文"、"搜文献"、"kb search"——这些属于 kb-search skill。
   区分规则：涉及"整理/构建/管理个人知识"→ 用 llm-wiki；
   涉及"搜索/检索团队共享文献或资料"→ 用 kb-search。
@@ -194,7 +196,7 @@ https://youtube.com/watch?v=xxxxx
 | `bilibili.com` / `b23.tv` | `/bilibili-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
 | `youtube.com` / `youtu.be` | `/youtube-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
 | `x.com` / `twitter.com` | `web_reader` | Prompt user to copy content manually |
-| `mp.weixin.qq.com` | `tavily_extract` | Prompt user to copy content manually |
+| `mp.weixin.qq.com` | `tavily_extract` | `scripts/fetch_wechat.py` (local direct fetch) → prompt user to copy manually. See [WeChat Article Processing](#wechat-article-processing). |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
 | `zhihu.com` | — | Anti-scraping blocks extraction — prompt user to copy content manually |
 | `xiaohongshu.com` | — | Requires xiaohongshu-mcp (external) — prompt user to copy content manually |
@@ -229,6 +231,51 @@ When a Bilibili or YouTube URL is detected:
 4. **Source naming for videos:**
    - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
    - `youtube.com/watch?v=xxx` → `youtube-{title-slug}`
+
+### WeChat Article Processing
+
+When a `mp.weixin.qq.com/s/...` URL is detected (in inbox, a URL list, or pasted directly in
+conversation), use this **3-tier fallback chain**. Single-article pages are public and NOT
+behind WeChat's anti-scraping wall (that wall only guards *batch history-list / read-count*
+crawling, which we never do). So extraction is reliable.
+
+**Tier 1 — `tavily_extract` (primary, verified, zero-install):**
+   - Call `tavily_extract(url, extract_depth="advanced")`.
+   - Best for clean body text. **Known quirks to handle:**
+     - `title` field often comes back `null` — the real title is the first `# H1` line in
+       `raw_content`. Use that.
+     - Footer junk appears at the very end (`Scan to Follow`, `Got It`, `Video Mini Program
+       Like`, `微信扫一扫`, repeated `Cancel/Allow`). **Strip everything from the first of
+       these markers onward** before creating the source summary.
+     - `images` is usually `[]` — WeChat lazy-loads images via `data-src`, which Tavily
+       doesn't resolve. If the article's images matter, fall to Tier 2 with `--images-dir`.
+   - If `raw_content` is empty or <100 meaningful chars, go to Tier 2.
+
+**Tier 2 — local direct fetch (`scripts/fetch_wechat.py`):**
+   - Adds what Tavily misses: **images** (resolves lazy-loaded `data-src`, downloads locally)
+     and **metadata** (title / author / publish_time). Footer is auto-stripped (it only parses
+     `#js_content`, so no junk).
+   - **Proxy: this is overseas access → MUST route through 17891, never 17890** (per global
+     rules). Run:
+     ```bash
+     http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
+     HTTP_PROXY=http://127.0.0.1:17891 HTTPS_PROXY=http://127.0.0.1:17891 \
+     all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
+     python3 ~/.claude/skills/llm-wiki/scripts/fetch_wechat.py "<url>" --json
+     ```
+   - Output modes: default = markdown with YAML frontmatter to stdout; `--json` = structured
+     `{title, author, publish_time, url, markdown, image_count}`; `--images-dir DIR` =
+     download images into `DIR` and rewrite body image links to `images/imageN.ext`.
+   - For knowledge-base ingestion of an article **with figures**, point `--images-dir` at the
+     source's asset folder so images are archived alongside the markdown.
+   - Exit code 2 = couldn't extract body (article deleted / needs login / link expired) → Tier 3.
+   - Dependencies (`requests`, `bs4`, `lxml`) are already installed; no markdown library needed.
+
+**Tier 3 — manual paste:** only if both above fail, tell the user:
+   > "这篇公众号文章自动抓取失败（可能已删除/需登录/链接失效）。请在微信里打开，复制全文粘贴给我。"
+
+**Source naming:** derive slug from the article title (Tier 1 H1 or Tier 2 `title`), kebab-case.
+`> Source:` field records the original `mp.weixin.qq.com` URL. `> Type: article`.
 
 ### PDF Processing
 
