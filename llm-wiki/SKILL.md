@@ -24,6 +24,14 @@ Two core principles:
 1. **Karpathy**: Raw docs → LLM "compiles" a structured wiki → Q&A → outputs loop back in.
 2. **kepano (Obsidian CEO)**: AI-generated content must be **isolated** from your trusted knowledge. Only `trust` moves content to your main vault after your explicit approval.
 
+> **铁律 · 获取 ≠ 入库（ACQUIRE ≠ INGEST）**
+> When the user pastes ANY link (WeChat / Xiaohongshu / YouTube / blog / paper …), the default
+> action is to **FETCH the content and SHOW it** — never silently write it into the knowledge
+> base. Only ingest (create source summary / wiki articles / download assets into the vault)
+> when the user EXPLICITLY says so ("加进去 / 存到知识库 / 入库 / save it"). Fetching is free;
+> ingesting is a deliberate, user-triggered act. If unsure whether the user wants ingestion,
+> fetch first, then ask "要把这篇加进知识库吗？".
+
 ---
 
 ## Global Configuration
@@ -59,8 +67,9 @@ llm-wiki can leverage other Claude Code skills for richer content ingestion. The
 
 | Dependency | What it does | When needed | How to check |
 |-----------|-------------|-------------|-------------|
-| `/bilibili-render-pdf` skill | Extracts Bilibili video content into structured notes + PDF | When a `bilibili.com` or `b23.tv` URL is provided | Check if skill exists: `ls ~/.claude/skills/bilibili-render-pdf/SKILL.md` |
-| `/youtube-render-pdf` skill | Extracts YouTube video content into structured notes + PDF | When a `youtube.com` or `youtu.be` URL is provided | Check if skill exists: `ls ~/.claude/skills/youtube-render-pdf/SKILL.md` |
+| `video-notes` conda env (`yt-dlp`+`ffmpeg`+`whisper`) | Pull video subtitles → text (default), or whisper-transcribe when no subs | Any YouTube/Bilibili URL where the user wants the **text** | `conda activate video-notes && yt-dlp --version` |
+| `/youtube-render-pdf` skill (OPT-IN) | Heavy figure-rich LaTeX+PDF teaching note | ONLY when user explicitly wants a **PDF** note | `ls ~/.claude/skills/youtube-render-pdf/SKILL.md` |
+| `/bilibili-render-pdf` skill (OPT-IN) | Heavy figure-rich LaTeX+PDF teaching note | ONLY when user explicitly wants a **PDF** note | `ls ~/.claude/skills/bilibili-render-pdf/SKILL.md` |
 | `tavily` MCP server | Web page extraction and search | When processing web URLs (blogs, news, WeChat articles) | Check if tavily tools are available in the current session |
 | `github` MCP server | GitHub repo extraction | When processing GitHub repo URLs | Check if github MCP tools are available in the current session |
 | `pymupdf4llm` (Python) | Enhanced PDF to Markdown conversion | When processing PDF files | `python3 -c "import pymupdf4llm"` |
@@ -194,8 +203,8 @@ https://youtube.com/watch?v=xxxxx
 
 | Domain | Primary Tool | Fallback |
 |--------|-------------|----------|
-| `bilibili.com` / `b23.tv` | `/bilibili-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
-| `youtube.com` / `youtu.be` | `/youtube-render-pdf` skill (generates structured notes + PDF) | `tavily_extract` for basic page info; or prompt user to paste transcript |
+| `youtube.com` / `youtu.be` | `scripts/fetch_youtube.py` — pulls existing subtitles → clean text, **NO PDF, no video download**. See [Video URL Processing](#video-url-processing). | no subs → whisper (video-notes env, ask first) → `/youtube-render-pdf` only if user explicitly wants a figure-rich PDF |
+| `bilibili.com` / `b23.tv` | `scripts/fetch_youtube.py` (yt-dlp supports bilibili too) → text if subs exist | bilibili 常无字幕 → whisper (video-notes env, ask first) → `/bilibili-render-pdf` only if user explicitly wants a PDF |
 | `x.com` / `twitter.com` | `web_reader` | Prompt user to copy content manually |
 | `mp.weixin.qq.com` | `tavily_extract` | `scripts/fetch_wechat.py` (local direct fetch) → prompt user to copy manually. See [WeChat Article Processing](#wechat-article-processing). |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
@@ -206,32 +215,46 @@ https://youtube.com/watch?v=xxxxx
 
 ### Video URL Processing
 
-When a Bilibili or YouTube URL is detected:
+**Design intent (Lily):** for videos the goal is the **text content**, not a fancy document.
+Prefer a ready-made transcript (subtitles = "现成 manuscript"), extract text, **never generate
+a PDF by default**. The heavy figure-rich PDF skills (`youtube-render-pdf` / `bilibili-render-pdf`)
+are kept as an OPT-IN only when the user explicitly asks for a PDF note. Remember the
+**获取 ≠ 入库** rule — fetch & show the transcript; only ingest when the user says so.
 
-1. **Check if the required skill is installed:**
+**Reused environment:** `yt-dlp`, `ffmpeg`, and `whisper` all already live in conda env
+`video-notes`. Do NOT install them again. `scripts/fetch_youtube.py` finds yt-dlp automatically
+(PATH → video-notes env). It works for YouTube AND Bilibili (yt-dlp supports both).
+
+**Tier 1 — existing subtitles → text (default, light, no PDF, no video download):**
    ```bash
-   ls ~/.claude/skills/bilibili-render-pdf/SKILL.md 2>/dev/null  # for Bilibili
-   ls ~/.claude/skills/youtube-render-pdf/SKILL.md 2>/dev/null    # for YouTube
+   eval "$(conda shell.bash hook)" && conda activate video-notes   # or let the script auto-find yt-dlp
+   http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
+   all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
+   python3 ~/.claude/skills/llm-wiki/scripts/fetch_youtube.py "<url>" --langs zh,en --json
    ```
+   - Internally: Tier 1a manual subtitles (best) → Tier 1b auto captions. `sub_type` in the
+     output tells you which (`manual` / `auto` / `none`). `--langs` sets language preference
+     (default `zh,en`, fuzzy-matches `zh-Hans`/`zh-CN`/`en-US`…).
+   - Overseas access → MUST use 17891 proxy (yt-dlp reads `http_proxy`/`ALL_PROXY` env).
+   - Output: clean transcript text. Treat it as the "document" for a source summary IF the
+     user wants it ingested.
 
-2. **If skill is available:**
-   a. Invoke the skill using the Skill tool (e.g., `Skill("bilibili-render-pdf", args: "<url>")`).
-   b. The skill generates structured notes (typically a `.md` or `.tex` file and a PDF).
-   c. Read the generated markdown/notes content.
-   d. Treat the content as the "document" and proceed with normal digest flow (create source summary).
-   e. Optionally move/copy the generated PDF to `raw/sources/` for archival.
+**Tier 2 — no subtitles at all (`sub_type: none`):** the video has neither manual nor auto
+   captions. Transcription then needs Whisper (available in the `video-notes` env, but it's
+   **heavy / GPU-bound**). **Ask the user first** before running it:
+   > "这个视频没有字幕。要我用 whisper 听写吗？（会下载音轨 + 占 GPU，慢一些）"
+   If yes: download audio with yt-dlp (`-f bestaudio -x`) into a temp dir, run whisper in the
+   video-notes env, then treat the transcript like Tier 1. (Pick a free GPU like the MinerU
+   section does — don't hardcode GPU 0.)
 
-3. **If skill is NOT available:**
-   a. Inform the user:
-      > "处理 Bilibili/YouTube 视频需要安装对应的 skill。要我帮你安装吗？"
-      > - Bilibili: "安装命令：`git clone <repo-url> ~/.claude/skills/bilibili-render-pdf`"
-      > - YouTube: "安装命令：`git clone <repo-url> ~/.claude/skills/youtube-render-pdf`"
-   b. Offer fallback: try `tavily_extract` for basic page metadata (title, description).
-   c. If fallback also fails, prompt user to paste transcript or summary manually.
+**Tier 3 — figure-rich PDF note (OPT-IN only):** ONLY when the user explicitly asks for a
+   teaching PDF / 图文笔记, invoke the dedicated skill via the Skill tool
+   (`youtube-render-pdf` / `bilibili-render-pdf`). This downloads the full video, extracts key
+   frames, builds LaTeX, and compiles a PDF — do not trigger it for plain text-extraction asks.
 
-4. **Source naming for videos:**
-   - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
+**Source naming for videos:**
    - `youtube.com/watch?v=xxx` → `youtube-{title-slug}`
+   - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
 
 ### WeChat Article Processing
 
@@ -320,7 +343,26 @@ warnings). The LLM must select signal from noise.
      ```
    - Rewrite body image refs to the local `images/imageN.ext` files it returns.
 
-**Step 4 — fallback:** if Tavily returns no note body (rare — happens if the note was deleted
+**Step 4 — read text OUT OF the images (Claude vision, NOT a separate OCR engine):**
+   Many Xiaohongshu notes carry their real content as **text inside the images** (screenshots,
+   "原文放附件了"). The short caption alone is not the knowledge — the images are. So after
+   downloading:
+   - **Convert webp→png/jpg if needed** (the `Read`/vision tool may not accept `.webp`). XHS
+     images are usually webp:
+     ```bash
+     python3 -c "from PIL import Image; import sys,glob,os
+     for p in glob.glob(sys.argv[1]+'/*.webp'):
+         Image.open(p).convert('RGB').save(os.path.splitext(p)[0]+'.png')" <images-dir>
+     ```
+   - **Read each image** with the `Read` tool (Claude's own vision) — it reads the text
+     directly, no `tesseract`/OCR engine required. Verified: XHS screenshot text comes through
+     cleanly and legibly.
+   - **Merge** the text extracted from the images into the note body, in carousel order, so the
+     ingested note captures the FULL knowledge (caption + everything written in the images).
+   - This whole chain is verified working: tavily (urls) → fetch_images (download, Referer,
+     17891) → PIL webp→png → Read (vision) → text.
+
+**Step 5 — fallback:** if Tavily returns no note body (rare — happens if the note was deleted
 or the link is malformed), prompt the user:
    > "这篇小红书笔记自动抓取失败。请在小红书 App 里打开，复制正文粘贴给我（图片也可以发我）。"
 
@@ -520,17 +562,17 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
    e. Convert the extracted text to a source summary with `> Source: raw/sources/{filename}`.
    f. **Move** the PDF to `raw/sources/`.
 
-9. **For each video URL** (Bilibili or YouTube):
+9. **For each video URL** (YouTube or Bilibili) — see [Video URL Processing](#video-url-processing):
 
-   a. **Detect**: URL matches `bilibili.com`, `b23.tv`, `youtube.com`, or `youtu.be`.
-   b. **Check skill availability**:
-      ```bash
-      ls ~/.claude/skills/bilibili-render-pdf/SKILL.md 2>/dev/null  # Bilibili
-      ls ~/.claude/skills/youtube-render-pdf/SKILL.md 2>/dev/null    # YouTube
-      ```
-   c. **If skill is available**: invoke via the Skill tool. Read the generated notes/markdown output. Treat the content as a regular document for source summary creation.
-   d. **If skill is NOT available**: inform the user what's missing, offer to help install, and offer fallback (tavily_extract for page metadata, or manual paste).
-   e. Create source summary with `> Source: {video-url}` and `> Type: video`.
+   a. **Detect**: URL matches `youtube.com`, `youtu.be`, `bilibili.com`, or `b23.tv`.
+   b. **Default = transcript text, NO PDF**: run `scripts/fetch_youtube.py` (via 17891 proxy)
+      to pull existing subtitles → clean text. This is the light default.
+   c. **No subtitles** (`sub_type: none`): ask the user before running whisper (video-notes env,
+      GPU). Don't auto-transcribe.
+   d. **PDF only on explicit request**: invoke `youtube-render-pdf`/`bilibili-render-pdf` via the
+      Skill tool ONLY when the user explicitly wants a figure-rich PDF note.
+   e. Create source summary with `> Source: {video-url}` and `> Type: video` — **but only if the
+      user asked to ingest** (获取 ≠ 入库). Otherwise just show the transcript.
 
 10. **For each GitHub/GitLab repo URL** (from URL list files):
 
