@@ -7,8 +7,9 @@ description: >
   "build a wiki", "organize my notes/papers/articles", "llm wiki", "个人知识库", or uses
   /llm-wiki command. Also trigger when user says "整理知识库", "编译wiki",
   "知识工厂", "帮我整理这些资料". Also trigger when the user pastes a content URL (微信公众号
-  mp.weixin.qq.com link, blog, paper, video) and wants it saved/ingested ("存到知识库",
-  "把这个链接存下来", "存这篇公众号"). Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
+  mp.weixin.qq.com link, 小红书 xiaohongshu.com / xhslink.com note, blog, paper, video) and
+  wants it saved/ingested ("存到知识库", "把这个链接存下来", "存这篇公众号", "存这篇小红书").
+  Subcommands: init, digest, compile, query, check, export, trust, status, save, read-paper.
   DO NOT trigger when: 用户说"搜共享知识库"、"搜论文"、"搜文献"、"kb search"——这些属于 kb-search skill。
   区分规则：涉及"整理/构建/管理个人知识"→ 用 llm-wiki；
   涉及"搜索/检索团队共享文献或资料"→ 用 kb-search。
@@ -199,7 +200,7 @@ https://youtube.com/watch?v=xxxxx
 | `mp.weixin.qq.com` | `tavily_extract` | `scripts/fetch_wechat.py` (local direct fetch) → prompt user to copy manually. See [WeChat Article Processing](#wechat-article-processing). |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
 | `zhihu.com` | — | Anti-scraping blocks extraction — prompt user to copy content manually |
-| `xiaohongshu.com` | — | Requires xiaohongshu-mcp (external) — prompt user to copy content manually |
+| `xiaohongshu.com` / `xhslink.com` | `tavily_extract` (works — note text + image URLs come back) | `scripts/fetch_images.py` for image archival → prompt user to copy manually. See [Xiaohongshu Note Processing](#xiaohongshu-note-processing). |
 | `github.com` / `gitlab.com` | GitHub MCP (`get_file_contents` for tree + README + key files) | `git clone` + Bash + Read |
 | Other (blogs, docs, Medium) | `web_reader` | `tavily_extract` |
 
@@ -276,6 +277,55 @@ crawling, which we never do). So extraction is reliable.
 
 **Source naming:** derive slug from the article title (Tier 1 H1 or Tier 2 `title`), kebab-case.
 `> Source:` field records the original `mp.weixin.qq.com` URL. `> Type: article`.
+
+### Xiaohongshu Note Processing
+
+For `xiaohongshu.com` notes and `xhslink.com/...` shortlinks. Xiaohongshu has heavy
+anti-scraping, BUT `tavily_extract` reliably renders the note and returns BOTH the full
+note text AND the image CDN URLs — verified working. The catch is the `raw_content` is
+buried in a lot of page boilerplate (login prompts, ICP/legal footer, nav menus, ad-block
+warnings). The LLM must select signal from noise.
+
+**Step 1 — extract with Tavily:**
+   - Call `tavily_extract(url, extract_depth="advanced")` on the shortlink or full URL
+     (shortlinks resolve fine — no need to expand them first).
+   - `raw_content` contains everything. The `images` field is usually `[]` (image URLs are
+     inline in `raw_content`, not in that field).
+
+**Step 2 — LLM cleans `raw_content`, KEEP only:**
+   - **Title**: the first `# H1`; strip the trailing ` - 小红书` suffix.
+   - **Author**: the Xiaohongshu user-profile display name (e.g. the `[小盖](.../user/profile/...)` link text).
+   - **Body**: the main prose block — the note's actual text. It sits between the author/carousel
+     section and the date line.
+   - **Date / location**: a line like `05-19 北京` (MM-DD + city).
+   - **Engagement**: three numbers near the end = 赞 / 收藏 / 评论 (e.g. `510 812 15`).
+   - **Image URLs**: all `https://sns-webpic-qc.xhscdn.com/...` URLs. The carousel total is the
+     `1/N` marker. **Dedupe** — Tavily repeats the first images (the carousel preview reuses
+     the first 2). Keep the unique set, in order.
+
+   **DISCARD**: login/QR boilerplate (`登录后...`, `获取验证码`, 用户协议/隐私政策 links),
+   the ICP/营业执照/网络文化经营许可证 legal footer, nav menus (发现/直播/发布/通知),
+   `温馨提示`/ad-block warning, `创作服务`/`蒲公英`/`商家入驻` activity menu, `blob:http://localhost/...`
+   placeholder images.
+
+**Step 3 — archive images (recommended; XHS CDN URLs are time-signed and EXPIRE):**
+   - The note's real content is often IN the images (screenshots / "原文放附件"), so archiving
+     matters. Download promptly with `scripts/fetch_images.py`. **XHS CDN has hotlink
+     protection → MUST pass `--referer https://www.xiaohongshu.com/`.** Overseas access → 17891:
+     ```bash
+     http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
+     all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
+     python3 ~/.claude/skills/llm-wiki/scripts/fetch_images.py \
+       --out <source-asset-dir> --referer "https://www.xiaohongshu.com/" <url1> <url2> ...
+     ```
+   - Rewrite body image refs to the local `images/imageN.ext` files it returns.
+
+**Step 4 — fallback:** if Tavily returns no note body (rare — happens if the note was deleted
+or the link is malformed), prompt the user:
+   > "这篇小红书笔记自动抓取失败。请在小红书 App 里打开，复制正文粘贴给我（图片也可以发我）。"
+
+**Source naming:** slug from the note title, kebab-case. `> Source:` records the original
+`xiaohongshu.com` / `xhslink.com` URL. `> Type: note`.
 
 ### PDF Processing
 
