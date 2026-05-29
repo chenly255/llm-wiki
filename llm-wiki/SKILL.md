@@ -185,6 +185,28 @@ inbox/ (files + URLs) ──digest──→ sources/    (tag & move)
 
 ---
 
+## Content Handlers (decoupled by knowledge type)
+
+llm-wiki is **decoupled by knowledge type**. Each type declares two INDEPENDENT things —
+**how to FETCH it (处理方式)** and **how to INGEST it (入库方式)**. Adding a new type = adding
+one row + its handler section; the core flow never changes. Retrieval-only sources (semantic
+search backends) are a SEPARATE axis — they are queried, never ingested (see
+[External Retrieval Sources](#external-retrieval-sources)).
+
+| Knowledge type | Detect | FETCH (处理方式) | INGEST (入库方式) | Handler section |
+|---|---|---|---|---|
+| WeChat article | `mp.weixin.qq.com` | tavily_extract → `scripts/fetch_wechat.py` | `wiki/sources/` article summary | [WeChat](#wechat-article-processing) |
+| Xiaohongshu note | `xiaohongshu.com` / `xhslink.com` | tavily_extract + `fetch_images.py` + **image→text via Read/vision** | note summary + images, image-text merged into body | [Xiaohongshu](#xiaohongshu-note-processing) |
+| YouTube / Bilibili | `youtube.com`/`youtu.be`/`bilibili.com`/`b23.tv` | `scripts/fetch_youtube.py` (subtitles→text, NO PDF) | video transcript summary | [Video](#video-url-processing) |
+| Academic PDF / arXiv | `.pdf` file / `arxiv.org` | MinerU → md+figures | `papers/{slug}/` structured folder | [read-paper](#10-read-paper--import-and-structure-a-scientific-paper) |
+| Web page (blog/docs) | other http(s) | tavily_extract / web reader | article summary | Extraction Strategy table |
+| Code repo | `github.com`/`gitlab.com` | GitHub MCP / `git clone` | entity (tool) summary | [Code Repo](#code-repository-processing) |
+| Plain file | `.md/.txt/.py/...` | Read | source summary | digest step 6 |
+| **Semantic retrieval source** | n/a (query-time) | external RAG (e.g. private DashVector) | **never ingested — query-only** | [External Retrieval Sources](#external-retrieval-sources) |
+
+Two universal rules cut across every handler: **获取 ≠ 入库** (fetch & show by default; ingest
+only on explicit request) and **provenance** (every ingested item records its `> Source:`).
+
 ## URL Handling
 
 llm-wiki supports ingesting content from URLs. Users can drop URL list files into `raw/inbox/`.
@@ -415,6 +437,56 @@ When a GitHub/GitLab URL is detected in inbox (or user provides a repo URL):
   - `arxiv.org/abs/2401.00001` → `arxiv-2401-00001`
   - `bilibili.com/video/BV1xxxx` → `bilibili-{title-slug}`
   - `youtube.com/watch?v=xxx` → `youtube-{title-slug}`
+
+---
+
+## External Retrieval Sources
+
+This is a **pluggable, query-time** axis, fully decoupled from ingestion. The wiki and any
+external source stay separate stores; `query` federates across them at search time and clearly
+attributes each result. **No external source is part of the default open-source install** — the
+mechanism only activates if the user has registered sources locally, so this skill stays
+generic and shippable.
+
+**Registration (local, private):** sources are declared in `~/.claude/llm-wiki.local.json`
+(NOT in this repo — it is gitignored, so each user's private backends never publish). Schema:
+```json
+{
+  "retrieval_sources": [
+    {
+      "name": "<display name>",
+      "id": "<stable id>",
+      "description": "<what it is>",
+      "trigger": "opt-in | always",
+      "run": {
+        "cwd": "<dir to run from, optional>",
+        "strip_proxy": true,
+        "command": "<shell command with {query} and {top_k} placeholders, prints JSON>",
+        "default_top_k": 5
+      },
+      "output": "json",
+      "result_label": "<how to attribute results in the answer>"
+    }
+  ]
+}
+```
+
+**Contract for a source command:** given `{query}`/`{top_k}`, print JSON
+`{ "source": "...", "query": "...", "hits": [{title, score, snippet, ...}], "chunks": [...] }`
+to stdout. Honor `cwd` and `strip_proxy` (国内服务直连剥代理；境外走 17891) when invoking it.
+
+**Trigger semantics:**
+- `opt-in` (default, recommended): query the source ONLY when the user explicitly names it
+  ("也搜<name> / 搜RAG / 查文献库 / also search <name>"). Keeps cost predictable — external
+  semantic search may consume API quota per call.
+- `always`: query on every `query` call.
+
+**Usage:** the `query` subcommand reads this file, runs the matching sources, and merges results
+labeled by each source's `result_label` (see [query](#4-query--query-the-knowledge-base)).
+External hits are **citations, not wiki content** — never auto-ingest them (获取 ≠ 入库).
+
+> Implementation note: registered source commands and any adapter scripts live under
+> `llm-wiki/extensions/` (gitignored). They are private to the user's machine and never shipped.
 
 ---
 
@@ -704,19 +776,33 @@ Compile reads ALL source summaries and builds/rebuilds the concept and entity ar
 
 1. **Locate wiki** using the [Locate Wiki Procedure](#locate-wiki-procedure-must-follow-for-all-subcommands-except-init).
 2. Read `wiki/_index.md` for scope.
-3. Search for relevant articles:
+3. Search the **local wiki** (always):
    ```bash
    python3 ~/.claude/skills/llm-wiki/scripts/search.py --wiki-dir wiki/ --query "question" --top-k 10
    ```
-3. Read top relevant articles (up to 5-8).
-4. Synthesize answer with citations: `[[source-name]]`.
-5. Ask: "Save this answer to the wiki?"
+4. **Federated search across external retrieval sources** (see [External Retrieval Sources](#external-retrieval-sources)):
+   - Load `~/.claude/llm-wiki.local.json` if it exists. If absent or it has no
+     `retrieval_sources`, skip this step entirely (the default open-source install has none).
+   - For each registered source, honor its `trigger`:
+     - `opt-in` → query it ONLY when the user explicitly names it ("也搜论文 / 搜RAG /
+       查文献库 / also search papers / search <source name>"). Do NOT call opt-in sources on a
+       plain question (they may cost API quota).
+     - `always` → query it on every question.
+   - Run the source's `run.command` (substituting `{query}` / `{top_k}`), respecting `cwd` and
+     `strip_proxy` (国内服务直连剥代理；境外走 17891). Parse its JSON output.
+5. Read top relevant local articles (up to 5-8).
+6. **Synthesize one answer, clearly attributing each source.** Cite local wiki as
+   `[[source-name]]`; label external-source results with that source's `result_label`
+   (e.g. "据 论文RAG（DashVector）：…"). Never blend them so the user can't tell which store a
+   claim came from.
+7. Ask: "Save this answer to the wiki?"
    - If yes: save to `wiki/concepts/{topic}.md` or `output/reports/{topic}.md`.
-   - Update index and backlinks.
+   - Update index and backlinks. (External-source hits are references, not wiki content — cite
+     them, but do not silently ingest them; honor 获取 ≠ 入库.)
 
 **Rules:**
-- Always cite wiki articles.
-- If the wiki lacks info, say so — never fabricate.
+- Always cite wiki articles; label external-source results distinctly.
+- If both wiki and (queried) external sources lack info, say so — never fabricate.
 - Suggest follow-up questions.
 
 **Log:** append query and result type to `log.md`:

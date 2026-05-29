@@ -10,6 +10,11 @@ xiaohongshu/
 prompt-*.md
 knowledge.md
 
+# Private extensions & local config (Lily-only; never publish)
+# 私有外部检索源（如 DashVector 论文 RAG）+ 本机配置，绝不上传公开仓库
+llm-wiki/extensions/
+*.local.json
+
 # Images (keep local only)
 images/
 *.png
