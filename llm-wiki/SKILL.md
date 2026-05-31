@@ -226,7 +226,7 @@ https://youtube.com/watch?v=xxxxx
 | Domain | Primary Tool | Fallback |
 |--------|-------------|----------|
 | `youtube.com` / `youtu.be` | `scripts/fetch_youtube.py` — pulls existing subtitles → clean text, **NO PDF, no video download**. See [Video URL Processing](#video-url-processing). | no subs → whisper (video-notes env, ask first) → `/youtube-render-pdf` only if user explicitly wants a figure-rich PDF |
-| `bilibili.com` / `b23.tv` | `scripts/fetch_youtube.py` (yt-dlp supports bilibili too) → text if subs exist | bilibili 常无字幕 → whisper (video-notes env, ask first) → `/bilibili-render-pdf` only if user explicitly wants a PDF |
+| `bilibili.com` / `b23.tv` | `scripts/fetch_youtube.py` (yt-dlp supports bilibili too) → text if subs exist. **国内服务→直连剥代理，不走 17891** | bilibili 常无字幕 → whisper (video-notes env, ask first) → `/bilibili-render-pdf` only if user explicitly wants a PDF |
 | `x.com` / `twitter.com` | `web_reader` | Prompt user to copy content manually |
 | `mp.weixin.qq.com` | `tavily_extract` | `scripts/fetch_wechat.py` (local direct fetch) → prompt user to copy manually. See [WeChat Article Processing](#wechat-article-processing). |
 | `arxiv.org` | `web_reader` | `tavily_extract` |
@@ -248,16 +248,24 @@ are kept as an OPT-IN only when the user explicitly asks for a PDF note. Remembe
 (PATH → video-notes env). It works for YouTube AND Bilibili (yt-dlp supports both).
 
 **Tier 1 — existing subtitles → text (default, light, no PDF, no video download):**
-   ```bash
-   eval "$(conda shell.bash hook)" && conda activate video-notes   # or let the script auto-find yt-dlp
-   http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
-   all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
-   python3 ~/.claude/skills/llm-wiki/scripts/fetch_youtube.py "<url>" --langs zh,en --json
-   ```
+   **代理分流按域名分**（yt-dlp 读 `http_proxy`/`ALL_PROXY` 环境变量）：
+   - **Bilibili (`bilibili.com` / `b23.tv`) 是国内服务 → 直连，剥掉代理**：
+     ```bash
+     eval "$(conda shell.bash hook)" && conda activate video-notes   # or let the script auto-find yt-dlp
+     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+         -u all_proxy -u ALL_PROXY -u no_proxy -u NO_PROXY \
+       python3 ~/.claude/skills/llm-wiki/scripts/fetch_youtube.py "<url>" --langs zh,en --json
+     ```
+   - **YouTube (`youtube.com` / `youtu.be`) 是境外服务 → 走 17891**：
+     ```bash
+     eval "$(conda shell.bash hook)" && conda activate video-notes
+     http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
+     all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
+     python3 ~/.claude/skills/llm-wiki/scripts/fetch_youtube.py "<url>" --langs zh,en --json
+     ```
    - Internally: Tier 1a manual subtitles (best) → Tier 1b auto captions. `sub_type` in the
      output tells you which (`manual` / `auto` / `none`). `--langs` sets language preference
      (default `zh,en`, fuzzy-matches `zh-Hans`/`zh-CN`/`en-US`…).
-   - Overseas access → MUST use 17891 proxy (yt-dlp reads `http_proxy`/`ALL_PROXY` env).
    - Output: clean transcript text. Treat it as the "document" for a source summary IF the
      user wants it ingested.
 
@@ -638,7 +646,7 @@ Digest only **processes and records** new documents. It does NOT rebuild the wik
 9. **For each video URL** (YouTube or Bilibili) — see [Video URL Processing](#video-url-processing):
 
    a. **Detect**: URL matches `youtube.com`, `youtu.be`, `bilibili.com`, or `b23.tv`.
-   b. **Default = transcript text, NO PDF**: run `scripts/fetch_youtube.py` (via 17891 proxy)
+   b. **Default = transcript text, NO PDF**: run `scripts/fetch_youtube.py` (Bilibili 国内→直连剥代理; YouTube 境外→走 17891)
       to pull existing subtitles → clean text. This is the light default.
    c. **No subtitles** (`sub_type: none`): ask the user before running whisper (video-notes env,
       GPU). Don't auto-transcribe.
