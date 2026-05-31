@@ -356,11 +356,12 @@ warnings). The LLM must select signal from noise.
 **Step 3 — archive images (recommended; XHS CDN URLs are time-signed and EXPIRE):**
    - The note's real content is often IN the images (screenshots / "原文放附件"), so archiving
      matters. Download promptly with `scripts/fetch_images.py`. **XHS CDN has hotlink
-     protection → MUST pass `--referer https://www.xiaohongshu.com/`.** Overseas access → 17891:
+     protection → MUST pass `--referer https://www.xiaohongshu.com/`.** 小红书是国内服务
+     (xiaohongshu.com / xhscdn.com) → 直连，剥掉代理，绝不走 17891/17890 (国内服务直连剥代理):
      ```bash
-     http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
-     all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
-     python3 ~/.claude/skills/llm-wiki/scripts/fetch_images.py \
+     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+         -u all_proxy -u ALL_PROXY -u no_proxy -u NO_PROXY \
+       python3 ~/.claude/skills/llm-wiki/scripts/fetch_images.py \
        --out <source-asset-dir> --referer "https://www.xiaohongshu.com/" <url1> <url2> ...
      ```
    - Rewrite body image refs to the local `images/imageN.ext` files it returns.
@@ -382,7 +383,7 @@ warnings). The LLM must select signal from noise.
    - **Merge** the text extracted from the images into the note body, in carousel order, so the
      ingested note captures the FULL knowledge (caption + everything written in the images).
    - This whole chain is verified working: tavily (urls) → fetch_images (download, Referer,
-     17891) → PIL webp→png → Read (vision) → text.
+     直连剥代理) → PIL webp→png → Read (vision) → text.
 
 **Step 5 — fallback:** if Tavily returns no note body (rare — happens if the note was deleted
 or the link is malformed), prompt the user:
