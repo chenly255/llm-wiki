@@ -301,13 +301,13 @@ crawling, which we never do). So extraction is reliable.
    - Adds what Tavily misses: **images** (resolves lazy-loaded `data-src`, downloads locally)
      and **metadata** (title / author / publish_time). Footer is auto-stripped (it only parses
      `#js_content`, so no junk).
-   - **Proxy: this is overseas access → MUST route through 17891, never 17890** (per global
-     rules). Run:
+   - **Proxy: WeChat 公众号 (mp.weixin.qq.com) is a DOMESTIC service (Tencent) → 直连，剥掉代理，
+     绝不走 17891 也绝不走 17890** (per global rules: 国内服务直连剥代理). Run with proxy env
+     stripped:
      ```bash
-     http_proxy=http://127.0.0.1:17891 https_proxy=http://127.0.0.1:17891 \
-     HTTP_PROXY=http://127.0.0.1:17891 HTTPS_PROXY=http://127.0.0.1:17891 \
-     all_proxy=socks5h://127.0.0.1:17891 ALL_PROXY=socks5h://127.0.0.1:17891 \
-     python3 ~/.claude/skills/llm-wiki/scripts/fetch_wechat.py "<url>" --json
+     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+         -u all_proxy -u ALL_PROXY -u no_proxy -u NO_PROXY \
+       python3 ~/.claude/skills/llm-wiki/scripts/fetch_wechat.py "<url>" --json
      ```
    - Output modes: default = markdown with YAML frontmatter to stdout; `--json` = structured
      `{title, author, publish_time, url, markdown, image_count}`; `--images-dir DIR` =
